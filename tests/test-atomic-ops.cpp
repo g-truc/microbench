@@ -535,8 +535,8 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
-	//for (int BarrierMode = 0; BarrierMode < sample_atomic_counter::BARRIER_COUNT; ++BarrierMode)
-	int BarrierMode = sample_atomic_counter::BARRIER_ONCE;
+	for (int BarrierMode = 0; BarrierMode < sample_atomic_counter::BARRIER_COUNT; ++BarrierMode)
+	//int BarrierMode = sample_atomic_counter::BARRIER_ONCE;
 	for (int AtomicMode = 0; AtomicMode < sample_atomic_counter::ATOMIC_TYPE_COUNT; ++AtomicMode)
 	for (int AtomicCount = 1; AtomicCount <= 8; ++AtomicCount)
 	{
