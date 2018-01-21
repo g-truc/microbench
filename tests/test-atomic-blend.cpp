@@ -65,7 +65,7 @@ namespace
 			Color = vec4(
 				((Counter & (Mask <<  0)) % 255) / 255.f,
 				((Counter & (Mask <<  8)) % 255) / 255.f,
-				((Counter & (Mask << 16)) % 255) / 15.f,
+				((Counter & (Mask << 16)) % 255) / 7.f,
 				0.5);
 		}
 	)";
@@ -106,7 +106,7 @@ class sample : public framework
 {
 public:
 	sample(int argc, char* argv[]) :
-		framework(argc, argv, "atomic-01-blend", framework::CORE, 4, 3, glm::uvec2(1200, 1200), glm::vec2(glm::pi<float>() * 0.2f), framework::RUN_ONLY),
+		framework(argc, argv, "atomic-01-blend", framework::CORE, 4, 3, glm::uvec2(800, 800), glm::vec2(glm::pi<float>() * 0.2f), framework::RUN_ONLY),
 		PipelineName(0),
 		ProgramName(0),
 		VertexArrayName(0)
@@ -252,8 +252,7 @@ private:
 
 	bool begin()
 	{
-		bool Validated(true);
-		Validated = Validated && this->checkExtension("GL_ARB_clear_buffer_object");
+		bool Validated = true;
 
 		if(Validated)
 			Validated = initBuffer();
@@ -305,7 +304,6 @@ private:
 
 		glBindBuffer(GL_COPY_READ_BUFFER, BufferName[buffer::CLEAR]);
 		glBindBuffer(GL_COPY_WRITE_BUFFER, BufferName[buffer::ATOMIC_COUNTER]);
-		glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, sizeof(GLuint));
 
 		glViewportIndexedf(0, 0, 0, WindowSize.x, WindowSize.y);
 		glClearBufferfv(GL_COLOR, 0, &glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)[0]);
@@ -315,6 +313,7 @@ private:
 		glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, BufferName[buffer::ATOMIC_COUNTER]);
 		glBindBufferBase(GL_UNIFORM_BUFFER, semantic::uniform::TRANSFORM0, BufferName[buffer::TRANSFORM]);
 
+		glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, sizeof(GLuint));
 		glDrawElementsInstancedBaseVertexBaseInstance(GL_TRIANGLES, ElementCount, GL_UNSIGNED_SHORT, 0, 5, 0, 0);
 
 		return true;

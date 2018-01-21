@@ -25,21 +25,20 @@ namespace
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
 
+		in vec4 gl_FragCoord;
+
 		void main()
 		{
 			uint Mask = (1 << 8) - 1;
-			uint CounterA = atomicCounterIncrement(Atomic);
-			memoryBarrier();
-			uint CounterB = atomicCounterIncrement(Atomic);
-			memoryBarrier();
-			uint CounterC = atomicCounterIncrement(Atomic);
-			memoryBarrier();
-			uint Counter = atomicCounterIncrement(Atomic);
+			uint Counter = 0;
+
+			if ((int(gl_FragCoord.x) % 3) == 0 && (int(gl_FragCoord.y) % 3) == 0)
+				Counter = atomicCounterIncrement(Atomic);
 
 			Color = vec4(
 				((Counter & (Mask <<  0)) % 255) / 255.f,
 				((Counter & (Mask <<  8)) % 255) / 255.f,
-				((Counter & (Mask << 16)) % 255) / 63.f,
+				((Counter & (Mask << 16)) % 255) / 15.f,
 				1.0 / 16.0);
 		}
 	)";
@@ -59,7 +58,7 @@ class sample : public framework
 {
 public:
 	sample(int argc, char* argv[]) :
-		framework(argc, argv, "atomic-06-barrier", framework::CORE, 4, 3, glm::uvec2(2400, 1200), glm::vec2(0), glm::vec2(0), 2, framework::RUN_ONLY),
+		framework(argc, argv, "atomic-05-if02x02", framework::CORE, 4, 3, glm::uvec2(2400, 1200), glm::vec2(0), glm::vec2(0), 2, framework::RUN_ONLY),
 		PipelineName(0),
 		ProgramName(0),
 		VertexArrayName(0)
@@ -144,7 +143,6 @@ private:
 	bool initBuffer()
 	{
 		glGenBuffers(buffer::MAX, &BufferName[0]);
-
 		glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, BufferName[buffer::ATOMIC_COUNTER]);
 		glBufferStorage(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), nullptr, GL_MAP_WRITE_BIT);
 		glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);

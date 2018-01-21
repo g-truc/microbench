@@ -4,7 +4,7 @@ if (NOT CMAKE_VERSION VERSION_LESS "3.1")
 	cmake_policy(SET CMP0054 NEW)
 endif()
 
-set(OGL_SAMPLES_NAME ogl-samples)
+set(OGL_SAMPLES_NAME perf)
 set(FRAMEWORK_NAME framework)
 
 project(${OGL_SAMPLES_NAME})
@@ -211,7 +211,7 @@ endif()
 ################################
 # Add subdirectory
 
-add_subdirectory(samples)
+add_subdirectory(tests)
 
 ################################
 # Add install

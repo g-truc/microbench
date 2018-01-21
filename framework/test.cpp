@@ -36,7 +36,7 @@ framework::framework
 	glm::vec2 const & Orientation,
 	success Success
 ) :
-	framework(argc, argv, Title, Profile, Major, Minor, WindowSize, Orientation, glm::vec2(0, 4), 2, Success)
+	framework(argc, argv, Title, Profile, Major, Minor, WindowSize, Orientation, glm::vec2(0, 4), 0, Success)
 {}
 
 framework::framework
@@ -57,7 +57,7 @@ framework::framework
 	profile Profile, int Major, int Minor,
 	heuristic Heuristic
 ) :
-	framework(argc, argv, Title, Profile, Major, Minor, glm::uvec2(640, 480), glm::vec2(0), glm::vec2(0, 4), 2, MATCH_TEMPLATE, Heuristic)
+	framework(argc, argv, Title, Profile, Major, Minor, glm::uvec2(640, 480), glm::vec2(0), glm::vec2(0, 4), 0, MATCH_TEMPLATE, Heuristic)
 {}
 
 framework::framework
@@ -186,10 +186,11 @@ int framework::operator()()
 
 	std::size_t FrameNum = 0;
 	bool Automated = false;
-#	ifdef AUTOMATED_TESTS
+	if (this->FrameCount != 0)
+	{
 		Automated = true;
 		FrameNum = this->FrameCount;
-#	endif//AUTOMATED_TESTS
+	}
 
 	while(Result == EXIT_SUCCESS && !this->Error)
 	{
@@ -826,11 +827,7 @@ bool framework::checkGLVersion(GLint MajorVersionRequire, GLint MinorVersionRequ
 	GLint MinorVersionContext = 0;
 	glGetIntegerv(GL_MAJOR_VERSION, &MajorVersionContext);
 	glGetIntegerv(GL_MINOR_VERSION, &MinorVersionContext);
-	printf("OpenGL Version Needed %d.%d ( %d.%d Found )\n",
-		MajorVersionRequire, MinorVersionRequire,
-		MajorVersionContext, MinorVersionContext);
-	return version(MajorVersionContext, MinorVersionContext) 
-		>= version(MajorVersionRequire, MinorVersionRequire);
+	return version(MajorVersionContext, MinorVersionContext) >= version(MajorVersionRequire, MinorVersionRequire);
 }
 
 void framework::cursorPositionCallback(GLFWwindow* Window, double x, double y)

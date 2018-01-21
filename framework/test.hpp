@@ -268,6 +268,8 @@ protected:
 	glm::vec3 cameraPosition() const;
 	bool checkTemplate(GLFWwindow* pWindow, char const* Title);
 
+	char const* title() const {return Title.c_str();}
+
 protected:
 	void beginTimer();
 	void endTimer();
