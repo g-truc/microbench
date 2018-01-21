@@ -542,7 +542,7 @@ int main(int argc, char* argv[])
 	for (int AtomicPredicatX = 1; AtomicPredicatX <= 1; ++AtomicPredicatX)
 	{
 		sample_atomic_counter Test(
-			argc, argv, WindowSize, Frames,
+			argc, argv, CSV, WindowSize, Frames,
 			static_cast<sample_atomic_counter::atomic_type>(AtomicMode), AtomicCount, glm::ivec2(AtomicPredicatX, AtomicPredicatY), static_cast<sample_atomic_counter::barrier>(BarrierMode));
 		Error += Test();
 	}
