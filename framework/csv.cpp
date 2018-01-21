@@ -17,6 +17,11 @@ std::string format(const char * Message, ...)
 	return Text;
 }
 
+void csv::header(char const* String)
+{
+	this->Header = String;
+}
+
 void csv::log(char const* String, double Convergent, double Min, double Max)
 {
 	this->Data.push_back(data(String, Convergent, Min, Max));
@@ -26,7 +31,7 @@ void csv::save(char const* Filename)
 {
 	FILE* File(fopen(Filename, "a+"));
 	assert(File);
-	fprintf(File, "%s;%s;%s;%s\n", "Tests", "average", "max", "min");
+	fprintf(File, "%s;%s;%s;%s\n", Header.c_str(), "average", "max", "min");
 
 	for(std::size_t i = 0; i < this->Data.size(); ++i)
 	{

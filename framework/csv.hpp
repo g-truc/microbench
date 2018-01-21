@@ -25,11 +25,13 @@ class csv
 	};
 
 public:
+	void header(char const* String);
 	void log(char const* String, double Average, double Min, double Max);
 	void save(char const* Filename);
 	void print();
 
 private:
+	std::string Header;
 	std::vector<data> Data;
 };
 

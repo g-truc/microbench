@@ -1,4 +1,5 @@
 #include "test.hpp"
+#include "csv.hpp"
 
 namespace
 {
@@ -21,6 +22,8 @@ namespace
 
 #		if defined(ATOMIC_COUNTER_ADD_ARB)
 			#extension GL_ARB_shader_atomic_counter_ops : require
+#		elif defined(ATOMIC_COUNTER_ADD_AMD)
+			#extension GL_AMD_shader_atomic_counter_ops : require
 #		endif
 
 #		if defined(ATOMIC_COUNTER_INC) || defined(ATOMIC_COUNTER_ADD_ARB) || defined(ATOMIC_COUNTER_ADD_AMD)
@@ -177,8 +180,9 @@ public:
 		return Table[Barrier];
 	}
 
-	sample_atomic_counter(int argc, char* argv[], glm::uvec2 WindowSize, std::size_t Frames, atomic_type AtomicType, int AtomicOpsCount, glm::ivec2 const& AtomicOpsPredicat, barrier Barrier)
+	sample_atomic_counter(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, atomic_type AtomicType, int AtomicOpsCount, glm::ivec2 const& AtomicOpsPredicat, barrier Barrier)
 		: framework(argc, argv, "atomic-ops", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
+		, CSV(CSV)
 		, AtomicType(AtomicType)
 		, AtomicOpsPredicat(AtomicOpsPredicat)
 		, AtomicOpsCount(AtomicOpsCount)
@@ -192,6 +196,7 @@ public:
 	{}
 
 private:
+	csv& CSV;
 	const atomic_type AtomicType;
 	const int AtomicOpsCount;
 	const glm::ivec2 AtomicOpsPredicat;
@@ -455,17 +460,30 @@ private:
 
 		if (this->TimerQueryCompleted)
 		{
+			GLuint64 TimeMin = ~0;
+			GLuint64 TimeMax = 0;
 			GLuint64 TimeSum = 0;
 			for (std::size_t i = 0; i < this->TimerQueryName.size(); ++i)
 			{
 				GLuint64 Time = 0;
 				glGetQueryObjectui64v(this->TimerQueryName[this->TimerQueryIndex], GL_QUERY_RESULT, &Time);
+				TimeMin = std::min(TimeMin, Time);
+				TimeMax = std::max(TimeMax, Time);
 				TimeSum += Time;
 			}
 
-			TimeSum /= static_cast<GLuint64>(this->TimerQueryName.size());
+			GLuint64 const TimeAvg = TimeSum /= static_cast<GLuint64>(this->TimerQueryName.size());
 
-			fprintf(stdout, "%s | Average rendering time: %.0f microseconds\n", Title.c_str(), static_cast<double>(TimeSum) / 1000.0);
+			fprintf(stdout, "%s | Average: %.0f us, Min: %.0f us, Max: %.0f us\n", Title.c_str(),
+				static_cast<double>(TimeAvg) / 1000.0,
+				static_cast<double>(TimeMin) / 1000.0,
+				static_cast<double>(TimeMax) / 1000.0);
+
+			CSV.log(format("atomic-counter ; %d ; %s ; %s ; %d ; %d ; ", 
+				this->AtomicOpsCount, GetString(this->AtomicType),
+				GetString(this->Barrier),
+				this->AtomicOpsPredicat.x, this->AtomicOpsPredicat.y).c_str(),
+				static_cast<double>(TimeAvg) / 1000.0, static_cast<double>(TimeMin) / 1000.0, static_cast<double>(TimeMax) / 1000.0);
 		}
 		else
 			fprintf(stdout, "%s | Not enough frames to report rendering time\n", Title.c_str());
@@ -511,7 +529,10 @@ int main(int argc, char* argv[])
 {
 	int Error = 0;
 
-	std::size_t const Frames = 5;
+	csv CSV;
+	CSV.header("atomic-counter ; AtomicOpsCount ; AtomicType ; BarrierMode ; AtomicOpsPredicat.x ; AtomicOpsPredicat.y");
+
+	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
 	for (int BarrierMode = 0; BarrierMode < sample_atomic_counter::BARRIER_COUNT; ++BarrierMode)
@@ -525,6 +546,8 @@ int main(int argc, char* argv[])
 			static_cast<sample_atomic_counter::atomic_type>(AtomicMode), AtomicCount, glm::ivec2(AtomicPredicatX, AtomicPredicatY), static_cast<sample_atomic_counter::barrier>(BarrierMode));
 		Error += Test();
 	}
+
+	CSV.save("../log.csv");
 
 	return Error;
 }
