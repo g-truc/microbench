@@ -466,7 +466,7 @@ private:
 			for (std::size_t i = 0; i < this->TimerQueryName.size(); ++i)
 			{
 				GLuint64 Time = 0;
-				glGetQueryObjectui64v(this->TimerQueryName[this->TimerQueryIndex], GL_QUERY_RESULT, &Time);
+				glGetQueryObjectui64v(this->TimerQueryName[i], GL_QUERY_RESULT, &Time);
 				TimeMin = std::min(TimeMin, Time);
 				TimeMax = std::max(TimeMax, Time);
 				TimeSum += Time;
@@ -479,7 +479,7 @@ private:
 				static_cast<double>(TimeMin) / 1000.0,
 				static_cast<double>(TimeMax) / 1000.0);
 
-			CSV.log(format("atomic-counter ; %d ; %s ; %s ; %d ; %d ; ", 
+			CSV.log(format("atomic-counter ; %d ; %s ; %s ; %d ; %d ", 
 				this->AtomicOpsCount, GetString(this->AtomicType),
 				GetString(this->Barrier),
 				this->AtomicOpsPredicat.x, this->AtomicOpsPredicat.y).c_str(),
@@ -535,18 +535,30 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
+	//for (int BarrierMode = 0; BarrierMode < sample_atomic_counter::BARRIER_COUNT; ++BarrierMode)
+	int BarrierMode = sample_atomic_counter::BARRIER_ONCE;
+	for (int AtomicMode = 0; AtomicMode < sample_atomic_counter::ATOMIC_TYPE_COUNT; ++AtomicMode)
+	for (int AtomicCount = 1; AtomicCount <= 8; ++AtomicCount)
+	{
+		sample_atomic_counter Test(
+			argc, argv, CSV, WindowSize, Frames,
+			static_cast<sample_atomic_counter::atomic_type>(AtomicMode), AtomicCount, glm::ivec2(1, 1), static_cast<sample_atomic_counter::barrier>(BarrierMode));
+		Error += Test();
+	}
+
+/* FULL
 	for (int BarrierMode = 0; BarrierMode < sample_atomic_counter::BARRIER_COUNT; ++BarrierMode)
 	for (int AtomicMode = 0; AtomicMode < sample_atomic_counter::ATOMIC_TYPE_COUNT; ++AtomicMode)
-	for (int AtomicCount = 1; AtomicCount <= 1; ++AtomicCount)
+	for (int AtomicCount = 1; AtomicCount <= 8; ++AtomicCount)
 	for (int AtomicPredicatY = 1; AtomicPredicatY <= 4; ++AtomicPredicatY)
-	for (int AtomicPredicatX = 1; AtomicPredicatX <= 1; ++AtomicPredicatX)
+	for (int AtomicPredicatX = 1; AtomicPredicatX <= 4; ++AtomicPredicatX)
 	{
 		sample_atomic_counter Test(
 			argc, argv, CSV, WindowSize, Frames,
 			static_cast<sample_atomic_counter::atomic_type>(AtomicMode), AtomicCount, glm::ivec2(AtomicPredicatX, AtomicPredicatY), static_cast<sample_atomic_counter::barrier>(BarrierMode));
 		Error += Test();
 	}
-
+*/
 	CSV.save("../log.csv");
 
 	return Error;
