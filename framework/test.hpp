@@ -260,7 +260,6 @@ protected:
 	void sync(sync_mode const & Sync);
 	void stop();
 
-	bool isExtensionSupported(char const* String);
 	glm::uvec2 getWindowSize() const;
 	bool isKeyPressed(int Key) const;
 	glm::mat4 view() const;

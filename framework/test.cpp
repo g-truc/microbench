@@ -257,17 +257,6 @@ void framework::log(csv & CSV, char const* String)
 	CSV.log(String, this->TimeSum / this->FrameCount, this->TimeMin, this->TimeMax);
 }
 
-bool framework::isExtensionSupported(char const* String)
-{
-	GLint ExtensionCount(0);
-	glGetIntegerv(GL_NUM_EXTENSIONS, &ExtensionCount);
-	for(GLint i = 0; i < ExtensionCount; ++i)
-		if(std::string((char const*)glGetStringi(GL_EXTENSIONS, i)) == std::string(String))
-			return true;
-	//printf("Failed to find Extension: \"%s\"\n",String);
-	return false;
-}
-
 glm::uvec2 framework::getWindowSize() const
 {
 	glm::ivec2 WindowSize(0);
@@ -817,7 +806,6 @@ bool framework::checkExtension(char const* ExtensionName) const
 	for(GLint i = 0; i < ExtensionCount; ++i)
 		if(std::string((char const*)glGetStringi(GL_EXTENSIONS, i)) == std::string(ExtensionName))
 			return true;
-	printf("Failed to find Extension: \"%s\"\n", ExtensionName);
 	return false;
 }
 
