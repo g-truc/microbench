@@ -143,7 +143,7 @@ framework::framework
 		glGetError();
 
 #		if defined(_DEBUG) && defined(GL_KHR_debug)
-			if(this->isExtensionSupported("GL_KHR_debug"))
+			if(this->checkExtension("GL_KHR_debug"))
 			{
 				glEnable(GL_DEBUG_OUTPUT);
 				glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
