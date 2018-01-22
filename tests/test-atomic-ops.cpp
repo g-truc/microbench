@@ -559,7 +559,7 @@ int main(int argc, char* argv[])
 		Error += Test();
 	}
 */
-	CSV.save("../log.csv");
+	CSV.save("../log-atomic-ops.csv");
 
 	return Error;
 }
