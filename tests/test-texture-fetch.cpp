@@ -27,10 +27,33 @@ namespace
 #		if defined(MODE_TEXTURE_FETCH) || defined(MODE_TEXTURE_SAMPLE)
 			layout(binding = 0) uniform sampler2D Texture[FETCH_COUNT];
 #		elif defined(MODE_IMAGE_LOAD)
-			layout(binding = 0, FORMAT) coherent restrict readonly uniform image2D Texture[FETCH_COUNT];
+			layout(binding = 0, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
 #		endif
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
+
+		vec3 convertSrgbToRgb(in vec3 ColorSRGB, in float Gamma)
+		{
+			return mix(
+				pow((ColorSRGB + 0.055) * 0.94786729857819905213270142180095, vec3(Gamma)),
+				ColorSRGB * 0.07739938080495356037151702786378,
+				lessThanEqual(ColorSRGB, vec3(0.04045)));
+		}
+
+		vec3 convertSrgbToRgb(in vec3 ColorSRGB)
+		{
+			return convertSrgbToRgb(ColorSRGB, 2.4);
+		}
+
+		vec4 convertSrgbToRgb(in vec4 ColorSRGB, in float Gamma)
+		{
+			return vec4(convertSrgbToRgb(ColorSRGB.rgb, Gamma), ColorSRGB.a);
+		}
+
+		vec4 convertSrgbToRgb(in vec4 ColorSRGB)
+		{
+			return vec4(convertSrgbToRgb(ColorSRGB.rgb, 2.4), ColorSRGB.a);
+		}
 
 		void main()
 		{
@@ -38,13 +61,21 @@ namespace
 
 			for(int i = 0; i < FETCH_COUNT; ++i)
 			{
+				vec4 Texel;
+
 #				if defined(MODE_TEXTURE_SAMPLE)
-					Color += texture(Texture[i], vec2(0.0));
+					Texel = texture(Texture[i], vec2(0.0));
 #				elif defined(MODE_TEXTURE_FETCH)
-					Color += texelFetch(Texture[i], ivec2(0, 0), 0);
+					Texel = texelFetch(Texture[i], ivec2(0, 0), 0);
 #				elif defined(MODE_IMAGE_LOAD)
-					Color += imageLoad(Texture[i], ivec2(0, 0));
+					Texel = imageLoad(Texture[i], ivec2(0, 0));
 #				endif
+
+#				if defined(ENABLE_SRGB_TO_LINEAR)
+					Texel = convertSrgbToRgb(Texel);
+#				endif
+
+				Color += Texel;
 			}
 		}
 	)";
@@ -62,18 +93,12 @@ public:
 
 	enum
 	{
-		MODE_COUNT = MODE_FIRST - MODE_LAST + 1
-	};
-
-	enum format
-	{
-		FORMAT_RGBA8_UNORM, FORMAT_FIRST = FORMAT_RGBA8_UNORM,
-		FORMAT_RGBA32F, FORMAT_LAST = FORMAT_RGBA32F
+		MODE_COUNT = MODE_LAST - MODE_FIRST + 1
 	};
 
 	char const* GetString(mode Mode) const
 	{
-		char const* Table[]
+		static char const* Table[]
 		{
 			"texture",
 			"texelFetch",
@@ -82,12 +107,59 @@ public:
 		return Table[Mode];
 	}
 
-	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, mode Mode, int FetchCount, format Format)
+	enum format
+	{
+		FORMAT_RGBA8_UNORM, FORMAT_FIRST = FORMAT_RGBA8_UNORM,
+		FORMAT_RGBA8_SRGB,
+		FORMAT_RGBA32F, FORMAT_LAST = FORMAT_RGBA32F
+	};
+
+	enum
+	{
+		FORMAT_COUNT = FORMAT_LAST - FORMAT_FIRST + 1
+	};
+
+	char const* GetString(format Format) const
+	{
+		static char const* Table[]
+		{
+			"rgba8unorm",
+			"rgba8srgb",
+			"rgba32f"
+		};
+		return Table[Format];
+	}
+
+	enum filter
+	{
+		FILTER_NEAREST, FILTER_FIRST = FILTER_NEAREST,
+		FILTER_BILINEAR,
+		FILTER_TRILINEAR, FILTER_LAST = FILTER_TRILINEAR
+	};
+
+	enum
+	{
+		FILTER_COUNT = FILTER_LAST - FILTER_FIRST + 1
+	};
+
+	char const* GetString(filter Filter) const
+	{
+		static char const* Table[]
+		{
+			"nearest",
+			"bilinear",
+			"trilinear"
+		};
+		return Table[Filter];
+	}
+
+	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, mode Mode, int FetchCount, format Format, filter Filter)
 		: framework(argc, argv, "texture-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
 		, CSV(CSV)
 		, Mode(Mode)
 		, FetchCount(FetchCount)
 		, Format(Format)
+		, Filter(Filter)
 		, PipelineName(0)
 		, ProgramName(0)
 		, VertexArrayName(0)
@@ -101,6 +173,7 @@ private:
 	const mode Mode;
 	const int FetchCount;
 	const format Format;
+	const filter Filter;
 	std::vector<GLuint> TextureName;
 	GLuint PipelineName;
 	GLuint ProgramName;
@@ -130,6 +203,8 @@ private:
 			FragShaderSource += "#define MODE_TEXTURE_FETCH 1 \n";
 			break;
 		case MODE_IMAGE_LOAD:
+			if (this->Format == FORMAT_RGBA8_SRGB)
+				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_IMAGE_LOAD 1 \n";
 			break;
 		}
@@ -137,6 +212,7 @@ private:
 		switch (this->Format)
 		{
 		case FORMAT_RGBA8_UNORM:
+		case FORMAT_RGBA8_SRGB:
 			FragShaderSource += "#define FORMAT rgba8 \n";
 			break;
 		case FORMAT_RGBA32F:
@@ -232,25 +308,44 @@ private:
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_GREEN);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_BLUE);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ALPHA);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+			switch(Filter)
+			{
+			case FILTER_NEAREST:
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				break;
+			case FILTER_BILINEAR:
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				break;
+			case FILTER_TRILINEAR:
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				break;
+			}
+
+			glm::vec4 Pixel32f = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
+
+			if (this->Format == FORMAT_RGBA8_SRGB)
+				Pixel32f = glm::convertLinearToSRGB(Pixel32f);
+
+			glm::uint Pixel8UNorm = glm::packUnorm4x8(Pixel32f);
 
 			switch(this->Format)
 			{
-				case FORMAT_RGBA8_UNORM:
-				{
-					glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
-					glm::vec4 const Pixel = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
-					glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
-					break;
-				}
-				case FORMAT_RGBA32F:
-				{
-					glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32F, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
-					glm::vec4 const Pixel = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
-					glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
-					break;
-				}
+			case FORMAT_RGBA8_UNORM:
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Pixel8UNorm);
+				break;
+			case FORMAT_RGBA8_SRGB:
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), this->Mode == MODE_IMAGE_LOAD ? GL_RGBA8 : GL_SRGB8_ALPHA8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Pixel8UNorm);
+				break;
+			case FORMAT_RGBA32F:
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32F, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel32f[0]);
+				break;
 			}
 		}
 
@@ -298,16 +393,33 @@ private:
 
 		switch (this->Mode)
 		{
-		case MODE_IMAGE_LOAD:
-			for (int i = 0; i < this->FetchCount; ++i)
-				glBindImageTexture(i, this->TextureName[i], 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
-			break;
-		case MODE_TEXTURE_FETCH:
-		case MODE_TEXTURE_SAMPLE:
-			for (int i = 0; i < this->FetchCount; ++i)
+			case MODE_IMAGE_LOAD:
 			{
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(GL_TEXTURE_2D, this->TextureName[i]);
+				GLenum InternalFormat = GL_NONE;
+
+				switch (this->Format)
+				{
+				case FORMAT_RGBA8_UNORM:
+				case FORMAT_RGBA8_SRGB:
+					InternalFormat = GL_RGBA8;
+					break;
+				case FORMAT_RGBA32F:
+					InternalFormat = GL_RGBA32F;
+					break;
+				}
+
+				for (int i = 0; i < this->FetchCount; ++i)
+					glBindImageTexture(i, this->TextureName[i], 0, GL_FALSE, 0, GL_READ_ONLY, InternalFormat);
+			}
+			break;
+			case MODE_TEXTURE_FETCH:
+			case MODE_TEXTURE_SAMPLE:
+			{
+				for (int i = 0; i < this->FetchCount; ++i)
+				{
+					glActiveTexture(GL_TEXTURE0 + i);
+					glBindTexture(GL_TEXTURE_2D, this->TextureName[i]);
+				}
 			}
 			break;
 		}
@@ -335,13 +447,14 @@ private:
 
 			GLuint64 const TimeAvg = TimeSum /= static_cast<GLuint64>(this->TimerQueryName.size());
 
-			fprintf(stdout, "%s | Average: %.0f us, Min: %.0f us, Max: %.0f us\n", Title.c_str(),
+			fprintf(stdout, "%s | %d %s %s | Average: %.0f us, Min: %.0f us, Max: %.0f us\n", Title.c_str(),
+				this->FetchCount, GetString(this->Mode), GetString(this->Format),
 				static_cast<double>(TimeAvg) / 1000.0,
 				static_cast<double>(TimeMin) / 1000.0,
 				static_cast<double>(TimeMax) / 1000.0);
 
-			CSV.log(::format("%s ; %d ; %s ",
-				this->title(), this->FetchCount, GetString(this->Mode)).c_str(),
+			CSV.log(::format("%s ; %d ; %s ; %s ; %s",
+				this->title(), this->FetchCount, GetString(this->Mode), GetString(this->Filter), GetString(this->Format)).c_str(),
 				static_cast<double>(TimeAvg) / 1000.0, static_cast<double>(TimeMin) / 1000.0, static_cast<double>(TimeMax) / 1000.0);
 		}
 		else
@@ -378,44 +491,21 @@ int main(int argc, char* argv[])
 	int Error = 0;
 
 	csv CSV;
-	CSV.header("texture-fetch ; FetchCount ; Mode");
+	CSV.header("texture-fetch ; FetchCount ; Mode ; Filter ; Format");
 
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
-	for (int i = 1; i <= 8; ++i)
-	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames, sample_texture_fetch::MODE_TEXTURE_SAMPLE, i, sample_texture_fetch::FORMAT_RGBA8_UNORM);
-		Error += Test();
-	}
+//	sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
+//		sample_texture_fetch::MODE_IMAGE_LOAD, 8, sample_texture_fetch::FORMAT_RGBA8_SRGB, sample_texture_fetch::FILTER_NEAREST);
+//	Error += Test();
 
-	for (int i = 1; i <= 8; ++i)
+	for (int Mode = 0; Mode < sample_texture_fetch::MODE_COUNT; ++Mode)
+	for (int Format = 0; Format < sample_texture_fetch::FORMAT_COUNT; ++Format)
+	for (int FetchCount = 1; FetchCount <= 8; ++FetchCount)
 	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames, sample_texture_fetch::MODE_TEXTURE_FETCH, i, sample_texture_fetch::FORMAT_RGBA8_UNORM);
-		Error += Test();
-	}
-
-	for (int i = 1; i <= 8; ++i)
-	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames, sample_texture_fetch::MODE_IMAGE_LOAD, i, sample_texture_fetch::FORMAT_RGBA8_UNORM);
-		Error += Test();
-	}
-
-	for (int i = 1; i <= 8; ++i)
-	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames, sample_texture_fetch::MODE_TEXTURE_SAMPLE, i, sample_texture_fetch::FORMAT_RGBA32F);
-		Error += Test();
-	}
-
-	for (int i = 1; i <= 8; ++i)
-	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames, sample_texture_fetch::MODE_TEXTURE_FETCH, i, sample_texture_fetch::FORMAT_RGBA32F);
-		Error += Test();
-	}
-
-	for (int i = 1; i <= 8; ++i)
-	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames, sample_texture_fetch::MODE_IMAGE_LOAD, i, sample_texture_fetch::FORMAT_RGBA32F);
+		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
+			static_cast<sample_texture_fetch::mode>(Mode), FetchCount, static_cast<sample_texture_fetch::format>(Format), sample_texture_fetch::FILTER_NEAREST);
 		Error += Test();
 	}
 
