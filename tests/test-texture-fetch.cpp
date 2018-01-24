@@ -18,6 +18,10 @@ namespace
 	)";
 
 	char const* FRAG_SHADER_SOURCE = R"(
+#		ifdef MODE_BINDLESS_IMAGE_LOAD
+			#extension GL_ARB_bindless_texture : require
+#		endif
+
 		#define FRAG_COLOR	0
 
 #		ifndef FETCH_COUNT
@@ -28,6 +32,8 @@ namespace
 			layout(binding = 0) uniform sampler2D Texture[FETCH_COUNT];
 #		elif defined(MODE_IMAGE_LOAD)
 			layout(binding = 0, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
+#		elif defined(MODE_BINDLESS_IMAGE_LOAD)
+			layout(bindless_image, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
 #		endif
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
@@ -67,7 +73,7 @@ namespace
 					Texel = texture(Texture[i], vec2(0.0));
 #				elif defined(MODE_TEXTURE_FETCH)
 					Texel = texelFetch(Texture[i], ivec2(0, 0), 0);
-#				elif defined(MODE_IMAGE_LOAD)
+#				elif defined(MODE_IMAGE_LOAD) || defined(MODE_BINDLESS_IMAGE_LOAD)
 					Texel = imageLoad(Texture[i], ivec2(0, 0));
 #				endif
 
@@ -88,7 +94,8 @@ public:
 	{
 		MODE_TEXTURE_SAMPLE, MODE_FIRST = MODE_TEXTURE_SAMPLE,
 		MODE_TEXTURE_FETCH,
-		MODE_IMAGE_LOAD, MODE_LAST = MODE_IMAGE_LOAD
+		MODE_IMAGE_LOAD,
+		MODE_BINDLESS_IMAGE_LOAD, MODE_LAST = MODE_BINDLESS_IMAGE_LOAD
 	};
 
 	enum
@@ -103,6 +110,7 @@ public:
 			"texture",
 			"texelFetch",
 			"imageLoad",
+			"bindless imageLoad"
 		};
 		return Table[Mode];
 	}
@@ -160,6 +168,7 @@ public:
 		, FetchCount(FetchCount)
 		, Format(Format)
 		, Filter(Filter)
+		, TextureLocation(0)
 		, PipelineName(0)
 		, ProgramName(0)
 		, VertexArrayName(0)
@@ -175,6 +184,7 @@ private:
 	const format Format;
 	const filter Filter;
 	std::vector<GLuint> TextureName;
+	GLint TextureLocation;
 	GLuint PipelineName;
 	GLuint ProgramName;
 	GLuint VertexArrayName;
@@ -206,6 +216,9 @@ private:
 			if (this->Format == FORMAT_RGBA8_SRGB)
 				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_IMAGE_LOAD 1 \n";
+			break;
+		case MODE_BINDLESS_IMAGE_LOAD:
+			FragShaderSource += "#define MODE_BINDLESS_IMAGE_LOAD 1 \n";
 			break;
 		}
 
@@ -281,6 +294,9 @@ private:
 				return false;
 			}
 		}
+
+		if (this->Mode == MODE_BINDLESS_IMAGE_LOAD)
+			this->TextureLocation = glGetUniformLocation(this->ProgramName, "Texture[0]");
 
 		glDeleteShader(VertShaderName);
 		glDeleteShader(FragShaderName);
@@ -376,6 +392,9 @@ private:
 	{
 		bool Validated = true;
 
+		if (Validated && this->Mode == MODE_BINDLESS_IMAGE_LOAD)
+			Validated = Validated && this->checkExtension("GL_ARB_bindless_texture");
+
 		if (Validated)
 			Validated = initTexture();
 		if(Validated)
@@ -385,43 +404,56 @@ private:
 		if (Validated)
 			Validated = initQuery();
 
-		glm::vec2 WindowSize(this->getWindowSize());
-		glViewportIndexedf(0, 0, 0, WindowSize.x, WindowSize.y);
-
-		glBindProgramPipeline(PipelineName);
-		glBindVertexArray(VertexArrayName);
-
-		switch (this->Mode)
+		if (Validated)
 		{
-			case MODE_IMAGE_LOAD:
-			{
-				GLenum InternalFormat = GL_NONE;
+			glm::vec2 WindowSize(this->getWindowSize());
+			glViewportIndexedf(0, 0, 0, WindowSize.x, WindowSize.y);
 
-				switch (this->Format)
-				{
-				case FORMAT_RGBA8_UNORM:
-				case FORMAT_RGBA8_SRGB:
-					InternalFormat = GL_RGBA8;
-					break;
-				case FORMAT_RGBA32F:
-					InternalFormat = GL_RGBA32F;
-					break;
-				}
+			glBindProgramPipeline(PipelineName);
+			glBindVertexArray(VertexArrayName);
 
-				for (int i = 0; i < this->FetchCount; ++i)
-					glBindImageTexture(i, this->TextureName[i], 0, GL_FALSE, 0, GL_READ_ONLY, InternalFormat);
-			}
-			break;
-			case MODE_TEXTURE_FETCH:
-			case MODE_TEXTURE_SAMPLE:
+			GLenum InternalFormat = GL_NONE;
+
+			switch (this->Format)
 			{
-				for (int i = 0; i < this->FetchCount; ++i)
-				{
-					glActiveTexture(GL_TEXTURE0 + i);
-					glBindTexture(GL_TEXTURE_2D, this->TextureName[i]);
-				}
+			case FORMAT_RGBA8_UNORM:
+			case FORMAT_RGBA8_SRGB:
+				InternalFormat = GL_RGBA8;
+				break;
+			case FORMAT_RGBA32F:
+				InternalFormat = GL_RGBA32F;
+				break;
 			}
-			break;
+
+			switch (this->Mode)
+			{
+				case MODE_BINDLESS_IMAGE_LOAD:
+				{
+					for (int i = 0; i < this->FetchCount; ++i)
+					{
+						GLuint64 Handle = glGetImageHandleARB(this->TextureName[i], 0, GL_FALSE, 0, InternalFormat);
+						glMakeImageHandleResidentARB(Handle, GL_READ_ONLY);
+						glProgramUniformHandleui64ARB(this->ProgramName, this->TextureLocation + i, Handle);
+					}
+				}
+				break;
+				case MODE_IMAGE_LOAD:
+				{
+					for (int i = 0; i < this->FetchCount; ++i)
+						glBindImageTexture(i, this->TextureName[i], 0, GL_FALSE, 0, GL_READ_ONLY, InternalFormat);
+				}
+				break;
+				case MODE_TEXTURE_FETCH:
+				case MODE_TEXTURE_SAMPLE:
+				{
+					for (int i = 0; i < this->FetchCount; ++i)
+					{
+						glActiveTexture(GL_TEXTURE0 + i);
+						glBindTexture(GL_TEXTURE_2D, this->TextureName[i]);
+					}
+				}
+				break;
+			}
 		}
 
 		return Validated;
@@ -496,9 +528,11 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
-//	sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
-//		sample_texture_fetch::MODE_IMAGE_LOAD, 8, sample_texture_fetch::FORMAT_RGBA8_SRGB, sample_texture_fetch::FILTER_NEAREST);
-//	Error += Test();
+	/*
+	sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
+		sample_texture_fetch::MODE_BINDLESS_IMAGE_LOAD, 4, sample_texture_fetch::FORMAT_RGBA8_UNORM, sample_texture_fetch::FILTER_NEAREST);
+	Error += Test();
+	*/
 
 	for (int Mode = 0; Mode < sample_texture_fetch::MODE_COUNT; ++Mode)
 	for (int Format = 0; Format < sample_texture_fetch::FORMAT_COUNT; ++Format)
