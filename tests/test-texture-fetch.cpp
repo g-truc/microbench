@@ -34,6 +34,15 @@ namespace
 			layout(binding = 0, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
 #		elif defined(MODE_BINDLESS_IMAGE_LOAD)
 			layout(bindless_image, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
+#		elif defined(MODE_UNIFORM_BUFFER)
+			layout(binding = 0) uniform bufferFetch
+			{
+#				if defined(FORMAT_RGBA32F)
+					vec4 Color;
+#				else
+					uint Color;
+#				endif
+			} Buffer[FETCH_COUNT];
 #		endif
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
@@ -75,6 +84,12 @@ namespace
 					Texel = texelFetch(Texture[i], ivec2(0, 0), 0);
 #				elif defined(MODE_IMAGE_LOAD) || defined(MODE_BINDLESS_IMAGE_LOAD)
 					Texel = imageLoad(Texture[i], ivec2(0, 0));
+#				elif defined(MODE_UNIFORM_BUFFER)
+#					if defined(FORMAT_RGBA32F)
+						Texel = Buffer[i].Color;
+#					else
+						Texel = unpackUnorm4x8(Buffer[i].Color);
+#					endif
 #				endif
 
 #				if defined(ENABLE_SRGB_TO_LINEAR)
@@ -95,7 +110,8 @@ public:
 		MODE_TEXTURE_SAMPLE, MODE_FIRST = MODE_TEXTURE_SAMPLE,
 		MODE_TEXTURE_FETCH,
 		MODE_IMAGE_LOAD,
-		MODE_BINDLESS_IMAGE_LOAD, MODE_LAST = MODE_BINDLESS_IMAGE_LOAD
+		MODE_BINDLESS_IMAGE_LOAD,
+		MODE_BUFFER_UNIFORM, MODE_LAST = MODE_BUFFER_UNIFORM
 	};
 
 	enum
@@ -110,7 +126,8 @@ public:
 			"texture",
 			"texelFetch",
 			"imageLoad",
-			"bindless imageLoad"
+			"bindless imageLoad",
+			"uniform buffer"
 		};
 		return Table[Mode];
 	}
@@ -184,6 +201,7 @@ private:
 	const format Format;
 	const filter Filter;
 	std::vector<GLuint> TextureName;
+	std::vector<GLuint> BufferName;
 	GLint TextureLocation;
 	GLuint PipelineName;
 	GLuint ProgramName;
@@ -218,7 +236,14 @@ private:
 			FragShaderSource += "#define MODE_IMAGE_LOAD 1 \n";
 			break;
 		case MODE_BINDLESS_IMAGE_LOAD:
+			if (this->Format == FORMAT_RGBA8_SRGB)
+				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_BINDLESS_IMAGE_LOAD 1 \n";
+			break;
+		case MODE_BUFFER_UNIFORM:
+			if (this->Format == FORMAT_RGBA8_SRGB)
+				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
+			FragShaderSource += "#define MODE_UNIFORM_BUFFER 1 \n";
 			break;
 		}
 
@@ -229,6 +254,7 @@ private:
 			FragShaderSource += "#define FORMAT rgba8 \n";
 			break;
 		case FORMAT_RGBA32F:
+			FragShaderSource += "#define FORMAT_RGBA32F \n";
 			FragShaderSource += "#define FORMAT rgba32f \n";
 			break;
 		}
@@ -370,6 +396,29 @@ private:
 		return true;
 	}
 
+	bool initBuffer()
+	{
+		glm::vec4 Pixel32f = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
+
+		if (this->Format == FORMAT_RGBA8_SRGB)
+			Pixel32f = glm::convertLinearToSRGB(Pixel32f);
+
+		glm::uint Pixel8UNorm = glm::packUnorm4x8(Pixel32f);
+
+		this->BufferName.resize(this->FetchCount);
+		glGenBuffers(this->FetchCount, &this->BufferName[0]);
+		for (int i = 0; i < this->FetchCount; ++i)
+		{
+			glBindBuffer(GL_UNIFORM_BUFFER, this->BufferName[i]);
+			if (this->Format == FORMAT_RGBA32F)
+				glBufferStorage(GL_UNIFORM_BUFFER, sizeof(Pixel32f), &Pixel32f[0], 0);
+			else
+				glBufferStorage(GL_UNIFORM_BUFFER, sizeof(Pixel8UNorm), &Pixel8UNorm, 0);
+		}
+
+		return true;
+	}
+
 	bool initVertexArray()
 	{
 		glGenVertexArrays(1, &VertexArrayName);
@@ -395,6 +444,8 @@ private:
 		if (Validated && this->Mode == MODE_BINDLESS_IMAGE_LOAD)
 			Validated = Validated && this->checkExtension("GL_ARB_bindless_texture");
 
+		if (Validated)
+			Validated = initBuffer();
 		if (Validated)
 			Validated = initTexture();
 		if(Validated)
@@ -450,6 +501,14 @@ private:
 					{
 						glActiveTexture(GL_TEXTURE0 + i);
 						glBindTexture(GL_TEXTURE_2D, this->TextureName[i]);
+					}
+				}
+				break;
+				case MODE_BUFFER_UNIFORM:
+				{
+					for (int i = 0; i < this->FetchCount; ++i)
+					{
+						glBindBufferBase(GL_UNIFORM_BUFFER, i, this->BufferName[i]);
 					}
 				}
 				break;
@@ -528,11 +587,9 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
-	/*
 	sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
-		sample_texture_fetch::MODE_BINDLESS_IMAGE_LOAD, 4, sample_texture_fetch::FORMAT_RGBA8_UNORM, sample_texture_fetch::FILTER_NEAREST);
+		sample_texture_fetch::MODE_BUFFER_UNIFORM, 4, sample_texture_fetch::FORMAT_RGBA8_SRGB, sample_texture_fetch::FILTER_NEAREST);
 	Error += Test();
-	*/
 
 	for (int Mode = 0; Mode < sample_texture_fetch::MODE_COUNT; ++Mode)
 	for (int Format = 0; Format < sample_texture_fetch::FORMAT_COUNT; ++Format)
