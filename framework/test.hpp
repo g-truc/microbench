@@ -7,10 +7,7 @@
 #include "compiler.hpp"
 #include "sementics.hpp"
 #include "vertex.hpp"
-#include "buffer.hpp"
-#include "caps.hpp"
 #include "util.hpp"
-#include "mesh.hpp"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>

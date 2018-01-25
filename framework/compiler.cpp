@@ -1,14 +1,3 @@
-//**********************************
-// Compiler
-// 21/09/2012 - 21/09/2012
-//**********************************
-// Christophe Riccio
-// ogl-samples@g-truc.net
-//**********************************
-// G-Truc Creation
-// www.g-truc.net
-//**********************************
-
 #include "compiler.hpp"
 
 #include <glm/gtc/random.hpp>

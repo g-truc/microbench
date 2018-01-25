@@ -4,10 +4,7 @@ if (NOT CMAKE_VERSION VERSION_LESS "3.1")
 	cmake_policy(SET CMP0054 NEW)
 endif()
 
-set(OGL_SAMPLES_NAME microbench)
-set(FRAMEWORK_NAME framework)
-
-project(${OGL_SAMPLES_NAME})
+project(microbench)
 enable_testing()
 
 #CMAKE_BUILD_TOOL
