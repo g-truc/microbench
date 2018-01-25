@@ -1,0 +1,32 @@
+shader main
+  asic(VI)
+  type(PS)
+                                                            // s_ps_state in s0
+
+  s_mov_b32     s0, s1                                  // 000000000000: BE800001
+  s_movk_i32    s1, 0x0000                              // 000000000004: B0010000
+  s_load_dwordx4  s[4:7], s[0:1], 0x140                 // 000000000008: C00A0100 00000140
+  s_waitcnt     lgkmcnt(0)                              // 000000000010: BF8C007F
+  s_andn2_b32   s5, s5, 0x3fff0000                      // 000000000014: 8905FF05 3FFF0000
+  s_buffer_load_dword  s2, s[4:7], 0x00                 // 00000000001C: C0220082 00000000
+  s_waitcnt     lgkmcnt(0)                              // 000000000024: BF8C007F
+  s_lshl_b32    s2, s2, 4                               // 000000000028: 8E028402
+  s_load_dwordx4  s[0:3], s[0:1], s2                    // 00000000002C: C0080000 00000002
+  s_waitcnt     lgkmcnt(0)                              // 000000000034: BF8C007F
+  s_andn2_b32   s1, s1, 0x3fff0000                      // 000000000038: 8901FF01 3FFF0000
+  s_buffer_load_dword  s0, s[0:3], 0x00                 // 000000000040: C0220000 00000000
+  s_waitcnt     lgkmcnt(0)                              // 000000000048: BF8C007F
+  v_cvt_f32_ubyte0  v0, s0                              // 00000000004C: 7E002200
+  v_cvt_f32_ubyte1  v1, s0                              // 000000000050: 7E022400
+  v_cvt_f32_ubyte2  v2, s0                              // 000000000054: 7E042600
+  v_cvt_f32_ubyte3  v3, s0                              // 000000000058: 7E062800
+  v_mov_b32     v4, 0x3b808081                          // 00000000005C: 7E0802FF 3B808081
+  v_mul_f32     v0, v4, v0                              // 000000000064: 0A000104
+  v_mul_f32     v1, v1, v4                              // 000000000068: 0A020901
+  v_mul_f32     v2, v2, v4                              // 00000000006C: 0A040902
+  v_mul_f32     v3, v3, v4                              // 000000000070: 0A060903
+  v_cvt_pkrtz_f16_f32  v0, v0, v1                       // 000000000074: D2960000 00020300
+  v_cvt_pkrtz_f16_f32  v1, v2, v3                       // 00000000007C: D2960001 00020702
+  exp           mrt0, v0, v0, v1, v1 done compr vm      // 000000000084: C4001C0F 00000100
+  s_endpgm                                              // 00000000008C: BF810000
+end
