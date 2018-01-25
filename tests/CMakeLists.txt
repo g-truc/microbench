@@ -12,4 +12,4 @@ endfunction(glCreateSampleGTC)
 
 glCreateSampleGTC(test-atomic-blend)
 glCreateSampleGTC(test-atomic-ops)
-glCreateSampleGTC(test-texture-fetch)
+glCreateSampleGTC(test-shader-fetch)

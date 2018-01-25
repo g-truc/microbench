@@ -34,8 +34,14 @@ namespace
 			layout(binding = 0, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
 #		elif defined(MODE_BINDLESS_IMAGE_LOAD)
 			layout(bindless_image, FORMAT) restrict readonly uniform image2D Texture[FETCH_COUNT];
-#		elif defined(MODE_UNIFORM_BUFFER)
-			layout(binding = 0) uniform bufferFetch
+#		elif defined(MODE_UNIFORM_BUFFER) || defined(MODE_SHADER_BUFFER)
+#			ifdef MODE_UNIFORM_BUFFER
+#				define QUALIFIER uniform
+#			elif MODE_SHADER_BUFFER
+#				define QUALIFIER buffer
+#			endif
+
+			layout(binding = 0) QUALIFIER bufferFetch
 			{
 #				if defined(FORMAT_RGBA32F)
 					vec4 Color;
@@ -84,7 +90,7 @@ namespace
 					Texel = texelFetch(Texture[i], ivec2(0, 0), 0);
 #				elif defined(MODE_IMAGE_LOAD) || defined(MODE_BINDLESS_IMAGE_LOAD)
 					Texel = imageLoad(Texture[i], ivec2(0, 0));
-#				elif defined(MODE_UNIFORM_BUFFER)
+#				elif defined(MODE_UNIFORM_BUFFER) || defined(MODE_SHADER_BUFFER)
 #					if defined(FORMAT_RGBA32F)
 						Texel = Buffer[i].Color;
 #					else
@@ -102,7 +108,7 @@ namespace
 	)";
 }//namespace
 
-class sample_texture_fetch : public framework
+class sample_shader_fetch : public framework
 {
 public:
 	enum mode
@@ -111,7 +117,8 @@ public:
 		MODE_TEXTURE_FETCH,
 		MODE_IMAGE_LOAD,
 		MODE_BINDLESS_IMAGE_LOAD,
-		MODE_BUFFER_UNIFORM, MODE_LAST = MODE_BUFFER_UNIFORM
+		MODE_BUFFER_UNIFORM,
+		MODE_BUFFER_SHADER, MODE_LAST = MODE_BUFFER_SHADER
 	};
 
 	enum
@@ -127,7 +134,8 @@ public:
 			"texelFetch",
 			"imageLoad",
 			"bindless imageLoad",
-			"uniform buffer"
+			"uniform buffer",
+			"shader buffer"
 		};
 		return Table[Mode];
 	}
@@ -178,8 +186,8 @@ public:
 		return Table[Filter];
 	}
 
-	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, mode Mode, int FetchCount, format Format, filter Filter)
-		: framework(argc, argv, "texture-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
+	sample_shader_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, mode Mode, int FetchCount, format Format, filter Filter)
+		: framework(argc, argv, "shader-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
 		, CSV(CSV)
 		, Mode(Mode)
 		, FetchCount(FetchCount)
@@ -244,6 +252,10 @@ private:
 			if (this->Format == FORMAT_RGBA8_SRGB)
 				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_UNIFORM_BUFFER 1 \n";
+		case MODE_BUFFER_SHADER:
+			if (this->Format == FORMAT_RGBA8_SRGB)
+				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
+			FragShaderSource += "#define MODE_SHADER_BUFFER 1 \n";
 			break;
 		}
 
@@ -512,6 +524,14 @@ private:
 					}
 				}
 				break;
+				case MODE_BUFFER_SHADER:
+				{
+					for (int i = 0; i < this->FetchCount; ++i)
+					{
+						glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, this->BufferName[i]);
+					}
+				}
+				break;
 			}
 		}
 
@@ -587,20 +607,20 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
-	sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
-		sample_texture_fetch::MODE_BUFFER_UNIFORM, 4, sample_texture_fetch::FORMAT_RGBA8_SRGB, sample_texture_fetch::FILTER_NEAREST);
+	sample_shader_fetch Test(argc, argv, CSV, WindowSize, 0,
+		sample_shader_fetch::MODE_BUFFER_SHADER, 4, sample_shader_fetch::FORMAT_RGBA8_SRGB, sample_shader_fetch::FILTER_NEAREST);
 	Error += Test();
 
-	for (int Mode = 0; Mode < sample_texture_fetch::MODE_COUNT; ++Mode)
-	for (int Format = 0; Format < sample_texture_fetch::FORMAT_COUNT; ++Format)
+	for (int Mode = 0; Mode < sample_shader_fetch::MODE_COUNT; ++Mode)
+	for (int Format = 0; Format < sample_shader_fetch::FORMAT_COUNT; ++Format)
 	for (int FetchCount = 1; FetchCount <= 8; ++FetchCount)
 	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			static_cast<sample_texture_fetch::mode>(Mode), FetchCount, static_cast<sample_texture_fetch::format>(Format), sample_texture_fetch::FILTER_NEAREST);
+		sample_shader_fetch Test(argc, argv, CSV, WindowSize, Frames,
+			static_cast<sample_shader_fetch::mode>(Mode), FetchCount, static_cast<sample_shader_fetch::format>(Format), sample_shader_fetch::FILTER_NEAREST);
 		Error += Test();
 	}
 
-	CSV.save("../log-texture-fetch.csv");
+	CSV.save("../log-shader-fetch.csv");
 
 	return Error;
 }
