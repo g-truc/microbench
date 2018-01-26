@@ -76,6 +76,21 @@ namespace
 			return vec4(convertSrgbToRgb(ColorSRGB.rgb, 2.4), ColorSRGB.a);
 		}
 
+		vec4 fastSrgbToRgb(in vec4 ColorSRGB)
+		{
+			return vec4(pow(ColorSRGB.rgb, vec3(2.2)), ColorSRGB.a);
+		}
+
+		vec3 approxSrgbToRGB(in vec3 ColorSRGB)
+		{
+			return ColorSRGB * (ColorSRGB * (ColorSRGB * 0.305306011 + 0.682171111) + 0.012522878);
+		}
+
+		vec4 approxSrgbToRGB(in vec4 ColorSRGB)
+		{
+			return vec4(approxSrgbToRGB(ColorSRGB.rgb), ColorSRGB.a);
+		}
+
 		void main()
 		{
 			Color = vec4(0);
@@ -99,7 +114,7 @@ namespace
 #				endif
 
 #				if defined(ENABLE_SRGB_TO_LINEAR)
-					Texel = convertSrgbToRgb(Texel);
+					Texel = fastSrgbToRgb(Texel);
 #				endif
 
 				Color += Texel;
@@ -608,7 +623,7 @@ int main(int argc, char* argv[])
 	glm::uvec2 const WindowSize(2400, 1200);
 
 	sample_shader_fetch Test(argc, argv, CSV, WindowSize, 0,
-		sample_shader_fetch::MODE_BUFFER_SHADER, 4, sample_shader_fetch::FORMAT_RGBA8_SRGB, sample_shader_fetch::FILTER_NEAREST);
+		sample_shader_fetch::MODE_BUFFER_UNIFORM, 4, sample_shader_fetch::FORMAT_RGBA8_SRGB, sample_shader_fetch::FILTER_NEAREST);
 	Error += Test();
 
 	for (int Mode = 0; Mode < sample_shader_fetch::MODE_COUNT; ++Mode)
