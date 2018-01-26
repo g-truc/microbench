@@ -47,6 +47,10 @@ namespace
 
 		uniform int AtomicCount;
 
+#		ifndef ATOMIC_COUNTER_INC
+			uniform int AtomicAmount;
+#		endif
+
 #		ifdef ATOMIC_PREDICAT
 			uniform ivec2 AtomicPredicat;
 #		endif
@@ -66,7 +70,6 @@ namespace
 		void main()
 		{
 			uint Counter = 0;
-			uint Data = 1;
 
 #			ifdef ATOMIC_PREDICAT
 				bool PerformAtomic = ((int(gl_FragCoord.x) % AtomicPredicat.x) == 0 && (int(gl_FragCoord.y) % AtomicPredicat.y) == 0);
@@ -80,16 +83,16 @@ namespace
 					Counter = atomicCounterIncrement(Atomic);
 
 #				elif defined(ATOMIC_COUNTER_ADD_ARB)
-					Counter = atomicCounterAddARB(Atomic, Data);
+					Counter = atomicCounterAddARB(Atomic, AtomicAmount);
 
 #				elif defined(ATOMIC_COUNTER_ADD_AMD)
-					Counter = atomicCounterAdd(Atomic, Data);
+					Counter = atomicCounterAdd(Atomic, AtomicAmount);
 
 #				elif defined(ATOMIC_BUFFER)
-					Counter = atomicAdd(FragIndex.Data, Data);
+					Counter = atomicAdd(FragIndex.Data, AtomicAmount);
 
 #				elif defined(ATOMIC_IMAGE)
-					Counter = imageAtomicAdd(Atomic, ivec2(0, 0), Data);
+					Counter = imageAtomicAdd(Atomic, ivec2(0, 0), AtomicAmount);
 
 #				endif
 
@@ -97,10 +100,6 @@ namespace
 					memoryBarrier();
 #				endif
 			}
-
-#			if defined(MEM_BARRIER_ONCE)
-				memoryBarrier();
-#			endif
 
 			Color = buildColorFromIndex(Counter, float(AtomicCount), 1.0f);
 		}
@@ -159,7 +158,6 @@ public:
 	enum barrier
 	{
 		BARRIER_NONE, BARRIER_FIRST = BARRIER_NONE,
-		BARRIER_ONCE,
 		BARRIER_ANY, BARRIER_LAST = BARRIER_ANY,
 	};
 
@@ -173,7 +171,6 @@ public:
 		char const* Table[]
 		{
 			"NONE",
-			"ONCE",
 			"ANY"
 		};
 
@@ -246,9 +243,6 @@ private:
 		{
 		case BARRIER_NONE:
 			FragShaderSource += "#define MEM_BARRIER_NONE 1 \n";
-			break;
-		case BARRIER_ONCE:
-			FragShaderSource += "#define MEM_BARRIER_ONCE 1 \n";
 			break;
 		case BARRIER_ANY:
 			FragShaderSource += "#define MEM_BARRIER_ANY 1 \n";
@@ -326,10 +320,18 @@ private:
 		GLuint UniformAtomicCount = glGetUniformLocation(ProgramName, "AtomicCount");
 		glProgramUniform1i(ProgramName, UniformAtomicCount, AtomicOpsCount);
 
+		if (this->AtomicType == ATOMIC_IMAGE_ADD || this->AtomicType == ATOMIC_BUFFER_ADD || this->AtomicType == ATOMIC_COUNTER_ADD)
+		{
+			GLuint UniformAtomicAmount = glGetUniformLocation(ProgramName, "AtomicAmount");
+			if (UniformAtomicAmount != -1)
+				glProgramUniform1i(ProgramName, UniformAtomicAmount, 1);
+		}
+
 		if (this->AtomicOpsPredicat.x > 1 || this->AtomicOpsPredicat.y > 1)
 		{
 			GLuint UniformAtomicPredicat = glGetUniformLocation(ProgramName, "AtomicPredicat");
-			glProgramUniform2i(ProgramName, UniformAtomicPredicat, AtomicOpsPredicat.x, AtomicOpsPredicat.y);
+			if (UniformAtomicPredicat != -1)
+				glProgramUniform2i(ProgramName, UniformAtomicPredicat, AtomicOpsPredicat.x, AtomicOpsPredicat.y);
 		}
 
 		return true;
@@ -534,6 +536,11 @@ int main(int argc, char* argv[])
 
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
+
+	sample_atomic_counter Test(
+		argc, argv, CSV, WindowSize, 0,
+		sample_atomic_counter::ATOMIC_COUNTER_ADD, 4, glm::ivec2(1, 1), sample_atomic_counter::BARRIER_NONE);
+	Error += Test();
 
 	for (int BarrierMode = 0; BarrierMode < sample_atomic_counter::BARRIER_COUNT; ++BarrierMode)
 	//int BarrierMode = sample_atomic_counter::BARRIER_ONCE;
