@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cstring>
 
+static char const* SEPARATOR = ",";
+
 std::string format(const char * Message, ...)
 {
 	assert(Message);
@@ -31,14 +33,16 @@ void csv::save(char const* Filename)
 {
 	FILE* File(fopen(Filename, "a+"));
 	assert(File);
-	fprintf(File, "%s;%s;%s;%s\n", Header.c_str(), "average", "max", "min");
+	fprintf(File, "%s %s %s %s %s %s %s\n", Header.c_str(), SEPARATOR, "average", SEPARATOR, "max", SEPARATOR, "min");
 
 	for(std::size_t i = 0; i < this->Data.size(); ++i)
 	{
-		fprintf(File, "%s;%d;%d;%d\n",
+		fprintf(File, "%s %s %d %s %d %s %d\n",
 			Data[i].String.c_str(),
+			SEPARATOR,
 			static_cast<int>(Data[i].Convergent),
-			static_cast<int>(Data[i].Max), static_cast<int>(Data[i].Min));
+			SEPARATOR,
+			static_cast<int>(Data[i].Max), SEPARATOR, static_cast<int>(Data[i].Min));
 	}
 	fclose(File);
 }
