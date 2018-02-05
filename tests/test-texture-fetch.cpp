@@ -24,32 +24,28 @@ namespace
 #			error FETCH_COUNT must be defined to a value between 1 and 8 included
 #		endif
 
-#		ifdef SAMPLER_FLOAT
+#		ifdef SAMPLER_1D
+			layout(binding = 0) uniform sampler1D Texture[FETCH_COUNT];
+#		elif defined(SAMPLER_2D)
 			layout(binding = 0) uniform sampler2D Texture[FETCH_COUNT];
-#		elif defined(SAMPLER_UINT32) || defined(SAMPLER_UINT8)
-			layout(binding = 0) uniform usampler2D Texture[FETCH_COUNT];
+#		elif defined(SAMPLER_3D)
+			layout(binding = 0) uniform sampler3D Texture[FETCH_COUNT];
 #		endif
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
 
 		void main()
 		{
-#			ifdef SAMPLER_FLOAT
-				Color = vec4(0);
-#			else
-				Color = uvec4(0);
-#			endif
+			Color = vec4(0);
 
 			for(int i = 0; i < FETCH_COUNT; ++i)
 			{
-#				if defined(SAMPLER_FLOAT)
+#				if defined(SAMPLER_1D)
+					Color += texture(Texture[i], 0.0) * (float(1.0) / float(FETCH_COUNT));
+#				elif defined(SAMPLER_2D)
 					Color += texture(Texture[i], vec2(0.0)) * (float(1.0) / float(FETCH_COUNT));
-#				elif defined(SAMPLER_UINT32)
-					uvec4 Texel = texture(Texture[i], vec2(0.0));
-					Color += vec4(Texel / 4294967295);
-#				elif defined(SAMPLER_UINT8)
-					uvec4 Texel = texture(Texture[i], vec2(0.0));
-					Color += vec4(Texel / 255);
+#				elif defined(SAMPLER_3D)
+					Color += texture(Texture[i], vec3(0.0)) * (float(1.0) / float(FETCH_COUNT));
 #				endif
 			}
 		}
@@ -62,11 +58,7 @@ public:
 	enum format
 	{
 		FORMAT_R8_UNORM, FORMAT_FIRST = FORMAT_R8_UNORM,
-		FORMAT_R8_UINT,
 		FORMAT_RGBA8_UNORM,
-		FORMAT_RGBA8_UINT,
-		FORMAT_R32_UINT,
-		FORMAT_RGBA32_UINT,
 		FORMAT_RGB9E5UF,
 		FORMAT_RG11B10UF,
 		FORMAT_RGBA16F,
@@ -83,11 +75,7 @@ public:
 		static char const* Table[]
 		{
 			"r8unorm",
-			"r8uint",
 			"rgba8unorm",
-			"rgba8uint",
-			"r32uint",
-			"rgba32uint",
 			"rgb9e5uf",
 			"rg11b10uf",
 			"rgba16f",
@@ -119,11 +107,34 @@ public:
 		return Table[Filter];
 	}
 
-	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, filter Filter, int AnisoSamples)
+	enum sampler
+	{
+		SAMPLER_1D, SAMPLER_FIRST = SAMPLER_1D,
+		SAMPLER_2D,
+		SAMPLER_3D, SAMPLER_LAST = SAMPLER_3D
+	};
+
+	enum
+	{
+		SAMPLER_COUNT = SAMPLER_LAST - SAMPLER_FIRST + 1
+	};
+
+	char const* GetString(sampler Sampler) const
+	{
+		static char const* Table[]
+		{
+			"2D",
+			"3D",
+		};
+		return Table[Sampler];
+	}
+
+	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, sampler Sampler, filter Filter, int AnisoSamples)
 		: framework(argc, argv, "texture-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
 		, CSV(CSV)
 		, FetchCount(FetchCount)
 		, Format(Format)
+		, Sampler(Sampler)
 		, Filter(Filter)
 		, AnisoSamples(AnisoSamples)
 		, TextureLocation(0)
@@ -139,6 +150,7 @@ private:
 	csv& CSV;
 	const int FetchCount;
 	const format Format;
+	const sampler Sampler;
 	const filter Filter;
 	const int AnisoSamples;
 	std::vector<GLuint> TextureName;
@@ -163,23 +175,19 @@ private:
 
 		FragShaderSource += ::format("#define FETCH_COUNT %d \n", this->FetchCount);
 
-		switch (this->Format)
+		switch (this->Sampler)
 		{
-		case FORMAT_R8_UNORM:
-		case FORMAT_RGBA8_UNORM:
-		case FORMAT_RGB9E5UF:
-		case FORMAT_RG11B10UF:
-		case FORMAT_RGBA16F:
-		case FORMAT_RGBA32F:
-			FragShaderSource += "#define SAMPLER_FLOAT \n";
+		case SAMPLER_1D:
+			FragShaderSource += "#define SAMPLER_1D \n";
 			break;
-		case FORMAT_R8_UINT:
-		case FORMAT_RGBA8_UINT:
-			FragShaderSource += "#define SAMPLER_UINT8 \n";
+		case SAMPLER_2D:
+			FragShaderSource += "#define SAMPLER_2D \n";
 			break;
-		case FORMAT_R32_UINT:
-		case FORMAT_RGBA32_UINT:
-			FragShaderSource += "#define SAMPLER_UINT32 \n";
+		case SAMPLER_3D:
+			FragShaderSource += "#define SAMPLER_3D \n";
+			break;
+		default:
+			assert(0);
 			break;
 		}
 
@@ -254,6 +262,22 @@ private:
 		return true;
 	}
 
+	GLenum GetTarget(sampler Sampler)
+	{
+		switch(this->Sampler)
+		{
+		case SAMPLER_1D:
+			return GL_TEXTURE_1D;
+		case SAMPLER_2D:
+			return GL_TEXTURE_2D;
+		case SAMPLER_3D:
+			return GL_TEXTURE_3D;
+		default:
+			assert(0);
+			return GL_NONE;
+		}
+	}
+
 	bool initTexture()
 	{
 		glm::ivec2 WindowSize(this->getWindowSize());
@@ -262,33 +286,38 @@ private:
 
 		glGenTextures(this->FetchCount, &TextureName[0]);
 
+		GLenum const Target = GetTarget(this->Sampler);
+
 		for (int i = 0; i < this->FetchCount; ++i)
 		{
-			glBindTexture(GL_TEXTURE_2D, TextureName[i]);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_RED);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_GREEN);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_BLUE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ALPHA);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, this->AnisoSamples);
+			glBindTexture(Target, TextureName[i]);
+			glTexParameteri(Target, GL_TEXTURE_BASE_LEVEL, 0);
+			glTexParameteri(Target, GL_TEXTURE_MAX_LEVEL, 0);
+			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_R, GL_RED);
+			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_G, GL_GREEN);
+			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_B, GL_BLUE);
+			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_A, GL_ALPHA);
+			glTexParameteri(Target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(Target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glTexParameteri(Target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+			glTexParameteri(Target, GL_TEXTURE_MAX_ANISOTROPY, this->AnisoSamples);
 
 			switch(Filter)
 			{
 			case FILTER_NEAREST:
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				glTexParameteri(Target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(Target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 				break;
 			case FILTER_BILINEAR:
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameteri(Target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				glTexParameteri(Target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 				break;
 			case FILTER_TRILINEAR:
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameteri(Target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+				glTexParameteri(Target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				break;
+			default:
+				assert(0);
 				break;
 			}
 
@@ -296,54 +325,113 @@ private:
 			glm::vec4 const Pixel_f32vec4 = glm::vec4(Pixel_f64vec4);
 			glm::uint const Packed_u8vec4 = glm::packUnorm4x8(Pixel_f32vec4);
 			glm::uint const Packed_rgb9e5uf = glm::packF3x9_E1x5(glm::vec3(Pixel_f32vec4));
-			glm::vec3 const Unpacked_rgb9e5uf = glm::unpackF3x9_E1x5(Packed_rgb9e5uf);
-
 			glm::uint const Packed_rg11b10uf = glm::packF2x11_1x10(glm::vec3(Pixel_f32vec4));
 			glm::u8vec4 const Pixel_u8vec4 = glm::u8vec4(Pixel_f32vec4 * float(std::numeric_limits<std::uint8_t>::max()));
 			glm::u32vec4 const Pixel_u32vec4 = glm::u32vec4(Pixel_f64vec4 * double(std::numeric_limits<std::uint32_t>::max()));
 
-			switch(this->Format)
+			switch(this->Sampler)
 			{
-			case FORMAT_R8_UNORM:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R8, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
+			case SAMPLER_1D:
+				switch(this->Format)
+				{
+				case FORMAT_R8_UNORM:
+					glTexStorage1D(Target, GLint(1), GL_R8, 1);
+					glTexSubImage1D(Target, 0, 0, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
+					break;
+				case FORMAT_RGBA8_UNORM:
+					glTexStorage1D(Target, GLint(1), GL_RGBA8, 1);
+					glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
+					break;
+				case FORMAT_RGB9E5UF:
+					glTexStorage1D(Target, GLint(1), GL_RGB9_E5, 1);
+					glTexSubImage1D(Target, 0, 0, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
+					break;
+				case FORMAT_RG11B10UF:
+					glTexStorage1D(Target, GLint(1), GL_R11F_G11F_B10F, 1);
+					glTexSubImage1D(Target, 0, 0, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
+					break;
+				case FORMAT_RGBA16F:
+					glTexStorage1D(Target, GLint(1), GL_RGBA16F, 1);
+					glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+					break;
+				case FORMAT_RGBA32F:
+					glTexStorage1D(Target, GLint(1), GL_RGBA32F, 1);
+					glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+					break;
+				default:
+					assert(0);
+					break;
+				}
 				break;
-			case FORMAT_R8_UINT:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R8UI, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_BYTE, &Pixel_u8vec4);
+			case SAMPLER_2D:
+				switch(this->Format)
+				{
+				case FORMAT_R8_UNORM:
+					glTexStorage2D(Target, GLint(1), GL_R8, 1, 1);
+					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
+					break;
+				case FORMAT_RGBA8_UNORM:
+					glTexStorage2D(Target, GLint(1), GL_RGBA8, 1, 1);
+					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
+					break;
+				case FORMAT_RGB9E5UF:
+					glTexStorage2D(Target, GLint(1), GL_RGB9_E5, 1, 1);
+					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
+					break;
+				case FORMAT_RG11B10UF:
+					glTexStorage2D(Target, GLint(1), GL_R11F_G11F_B10F, 1, 1);
+					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
+					break;
+				case FORMAT_RGBA16F:
+					glTexStorage2D(Target, GLint(1), GL_RGBA16F, 1, 1);
+					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+					break;
+				case FORMAT_RGBA32F:
+					glTexStorage2D(Target, GLint(1), GL_RGBA32F, 1, 1);
+					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+					break;
+				default:
+					assert(0);
+					break;
+				}
 				break;
-			case FORMAT_RGBA8_UNORM:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
+			case SAMPLER_3D:
+				switch(this->Format)
+				{
+				case FORMAT_R8_UNORM:
+					glTexStorage3D(Target, GLint(1), GL_R8, 1, 1, 1);
+					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
+					break;
+				case FORMAT_RGBA8_UNORM:
+					glTexStorage3D(Target, GLint(1), GL_RGBA8, 1, 1, 1);
+					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
+					break;
+				case FORMAT_RGB9E5UF:
+					glTexStorage3D(Target, GLint(1), GL_RGB9_E5, 1, 1, 1);
+					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
+					break;
+				case FORMAT_RG11B10UF:
+					glTexStorage3D(Target, GLint(1), GL_R11F_G11F_B10F, 1, 1, 1);
+					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
+					break;
+				case FORMAT_RGBA16F:
+					glTexStorage3D(Target, GLint(1), GL_RGBA16F, 1, 1, 1);
+					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+					break;
+				case FORMAT_RGBA32F:
+					glTexStorage3D(Target, GLint(1), GL_RGBA32F, 1, 1, 1);
+					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+					break;
+				default:
+					assert(0);
+					break;
+				}
 				break;
-			case FORMAT_RGBA8_UINT:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8UI, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
-				break;
-			case FORMAT_RGBA32_UINT:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32UI, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_INT, &Pixel_u32vec4[0]);
-				break;
-			case FORMAT_RGB9E5UF:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGB9_E5, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
-				break;
-			case FORMAT_RG11B10UF:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R11F_G11F_B10F, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
-				break;
-			case FORMAT_RGBA16F:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA16F, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-				break;
-			case FORMAT_RGBA32F:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32F, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
+			default:
+				assert(0);
 				break;
 			}
 		}
-
-		glBindTexture(GL_TEXTURE_2D, 0);
 
 		return true;
 	}
@@ -390,7 +478,7 @@ private:
 			for (int i = 0; i < this->FetchCount; ++i)
 			{
 				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(GL_TEXTURE_2D, this->TextureName[i]);
+				glBindTexture(GetTarget(this->Sampler), this->TextureName[i]);
 			}
 		}
 
@@ -468,7 +556,7 @@ int main(int argc, char* argv[])
 
 	{
 		sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
-			16, sample_texture_fetch::FORMAT_RGB9E5UF, sample_texture_fetch::FILTER_NEAREST, 1);
+			16, sample_texture_fetch::FORMAT_RGBA16F, sample_texture_fetch::SAMPLER_3D, sample_texture_fetch::FILTER_TRILINEAR, 16);
 		Error += Test();
 	}
 
@@ -485,7 +573,7 @@ int main(int argc, char* argv[])
 	for (int FetchCount = 1; FetchCount <= 32; FetchCount <<= 1)
 	{
 		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			FetchCount, Formats[FormatIndex], static_cast<sample_texture_fetch::filter>(Filter), 1);
+			FetchCount, Formats[FormatIndex], sample_texture_fetch::SAMPLER_2D, static_cast<sample_texture_fetch::filter>(Filter), 1);
 		Error += Test();
 	}
 
