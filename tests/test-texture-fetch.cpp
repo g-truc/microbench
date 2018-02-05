@@ -18,10 +18,6 @@ namespace
 	)";
 
 	char const* FRAG_SHADER_SOURCE = R"(
-#		ifdef MODE_BINDLESS_IMAGE_LOAD
-			#extension GL_ARB_bindless_texture : require
-#		endif
-
 		#define FRAG_COLOR	0
 
 #		ifndef FETCH_COUNT
@@ -171,6 +167,7 @@ private:
 		{
 		case FORMAT_R8_UNORM:
 		case FORMAT_RGBA8_UNORM:
+		case FORMAT_RGB9E5UF:
 		case FORMAT_RG11B10UF:
 		case FORMAT_RGBA16F:
 		case FORMAT_RGBA32F:
@@ -299,6 +296,8 @@ private:
 			glm::vec4 const Pixel_f32vec4 = glm::vec4(Pixel_f64vec4);
 			glm::uint const Packed_u8vec4 = glm::packUnorm4x8(Pixel_f32vec4);
 			glm::uint const Packed_rgb9e5uf = glm::packF3x9_E1x5(glm::vec3(Pixel_f32vec4));
+			glm::vec3 const Unpacked_rgb9e5uf = glm::unpackF3x9_E1x5(Packed_rgb9e5uf);
+
 			glm::uint const Packed_rg11b10uf = glm::packF2x11_1x10(glm::vec3(Pixel_f32vec4));
 			glm::u8vec4 const Pixel_u8vec4 = glm::u8vec4(Pixel_f32vec4 * float(std::numeric_limits<std::uint8_t>::max()));
 			glm::u32vec4 const Pixel_u32vec4 = glm::u32vec4(Pixel_f64vec4 * double(std::numeric_limits<std::uint32_t>::max()));
@@ -306,39 +305,39 @@ private:
 			switch(this->Format)
 			{
 			case FORMAT_R8_UNORM:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R8, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
 				break;
 			case FORMAT_R8_UINT:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R8UI, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R8UI, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_BYTE, &Pixel_u8vec4);
 				break;
 			case FORMAT_RGBA8_UNORM:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
 				break;
 			case FORMAT_RGBA8_UINT:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8UI, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA8UI, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
 				break;
 			case FORMAT_RGBA32_UINT:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32UI, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32UI, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA_INTEGER, GL_UNSIGNED_INT, &Pixel_u32vec4[0]);
 				break;
 			case FORMAT_RGB9E5UF:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGB9_E5, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGB9_E5, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
 				break;
 			case FORMAT_RG11B10UF:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R11F_G11F_B10F, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_R11F_G11F_B10F, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
 				break;
 			case FORMAT_RGBA16F:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA16F, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA16F, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
 				break;
 			case FORMAT_RGBA32F:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32F, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), GL_RGBA32F, 1, 1);
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
 				break;
 			}
@@ -466,6 +465,12 @@ int main(int argc, char* argv[])
 
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
+
+	{
+		sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
+			16, sample_texture_fetch::FORMAT_RGB9E5UF, sample_texture_fetch::FILTER_NEAREST, 1);
+		Error += Test();
+	}
 
 	sample_texture_fetch::format const Formats[] = {
 		sample_texture_fetch::FORMAT_RGBA8_UNORM,
