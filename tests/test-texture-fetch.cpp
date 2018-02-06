@@ -1,5 +1,6 @@
 #include "test.hpp"
 #include "csv.hpp"
+#include <array>
 
 namespace
 {
@@ -26,10 +27,18 @@ namespace
 
 #		ifdef SAMPLER_1D
 			layout(binding = 0) uniform sampler1D Texture[FETCH_COUNT];
+#		elif defined(SAMPLER_1D_ARRAY)
+			layout(binding = 0) uniform sampler1DArray Texture[FETCH_COUNT];
 #		elif defined(SAMPLER_2D)
 			layout(binding = 0) uniform sampler2D Texture[FETCH_COUNT];
+#		elif defined(SAMPLER_2D_ARRAY)
+			layout(binding = 0) uniform sampler2DArray Texture[FETCH_COUNT];
 #		elif defined(SAMPLER_3D)
 			layout(binding = 0) uniform sampler3D Texture[FETCH_COUNT];
+#		elif defined(SAMPLER_CUBE)
+			layout(binding = 0) uniform samplerCube Texture[FETCH_COUNT];
+#		elif defined(SAMPLER_CUBE_ARRAY)
+			layout(binding = 0) uniform samplerCubeArray Texture[FETCH_COUNT];
 #		endif
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
@@ -42,10 +51,12 @@ namespace
 			{
 #				if defined(SAMPLER_1D)
 					Color += texture(Texture[i], 0.0) * (float(1.0) / float(FETCH_COUNT));
-#				elif defined(SAMPLER_2D)
+#				elif defined(SAMPLER_2D) || defined(SAMPLER_1D_ARRAY)
 					Color += texture(Texture[i], vec2(0.0)) * (float(1.0) / float(FETCH_COUNT));
-#				elif defined(SAMPLER_3D)
+#				elif defined(SAMPLER_2D_ARRAY) || defined(SAMPLER_3D) || defined(SAMPLER_CUBE)
 					Color += texture(Texture[i], vec3(0.0)) * (float(1.0) / float(FETCH_COUNT));
+#				elif defined(SAMPLER_CUBE_ARRAY)
+					Color += texture(Texture[i], vec4(0.0)) * (float(1.0) / float(FETCH_COUNT));
 #				endif
 			}
 		}
@@ -57,8 +68,8 @@ class sample_texture_fetch : public framework
 public:
 	enum format
 	{
-		FORMAT_R8_UNORM, FORMAT_FIRST = FORMAT_R8_UNORM,
-		FORMAT_RGBA8_UNORM,
+		FORMAT_RGBA8_UNORM, FORMAT_FIRST = FORMAT_RGBA8_UNORM,
+		FORMAT_RGBA8_SRGB,
 		FORMAT_RGB9E5UF,
 		FORMAT_RG11B10UF,
 		FORMAT_RGBA16F,
@@ -69,20 +80,6 @@ public:
 	{
 		FORMAT_COUNT = FORMAT_LAST - FORMAT_FIRST + 1
 	};
-
-	char const* GetString(format Format) const
-	{
-		static char const* Table[]
-		{
-			"r8unorm",
-			"rgba8unorm",
-			"rgb9e5uf",
-			"rg11b10uf",
-			"rgba16f",
-			"rgba32f"
-		};
-		return Table[Format];
-	}
 
 	enum filter
 	{
@@ -110,24 +107,18 @@ public:
 	enum sampler
 	{
 		SAMPLER_1D, SAMPLER_FIRST = SAMPLER_1D,
+		SAMPLER_1D_ARRAY,
 		SAMPLER_2D,
-		SAMPLER_3D, SAMPLER_LAST = SAMPLER_3D
+		SAMPLER_2D_ARRAY,
+		SAMPLER_3D,
+		SAMPLER_CUBE,
+		SAMPLER_CUBE_ARRAY, SAMPLER_LAST = SAMPLER_CUBE_ARRAY
 	};
 
 	enum
 	{
 		SAMPLER_COUNT = SAMPLER_LAST - SAMPLER_FIRST + 1
 	};
-
-	char const* GetString(sampler Sampler) const
-	{
-		static char const* Table[]
-		{
-			"2D",
-			"3D",
-		};
-		return Table[Sampler];
-	}
 
 	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, sampler Sampler, filter Filter, int AnisoSamples)
 		: framework(argc, argv, "texture-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
@@ -164,6 +155,86 @@ private:
 	std::size_t TimerQueryCount;
 	bool TimerQueryCompleted;
 
+	char const* GetString(sampler Sampler) const
+	{
+		static char const* Table[]
+		{
+			"1D",
+			"1D Array",
+			"2D",
+			"2D Array",
+			"3D",
+			"Cube",
+			"Cube Array",
+		};
+		static_assert((sizeof(Table) / sizeof(Table[0])) == SAMPLER_COUNT, "Invalid table size");
+
+		return Table[Sampler];
+	}
+
+	std::string const GetSamplerDefine(sampler Sampler) const
+	{
+		static char const* Table[] = {
+			"SAMPLER_1D",				// SAMPLER_1D
+			"SAMPLER_1D_ARRAY",			// SAMPLER_1D_ARRAY
+			"SAMPLER_2D",				// SAMPLER_2D
+			"SAMPLER_2D_ARRAY",			// SAMPLER_2D_ARRAY
+			"SAMPLER_3D",				// SAMPLER_3D
+			"SAMPLER_CUBE",				// SAMPLER_CUBE
+			"SAMPLER_CUBE_ARRAY"		// SAMPLER_CUBE_ARRAY
+		};
+		static_assert((sizeof(Table) / sizeof(Table[0])) == SAMPLER_COUNT, "Invalid table size");
+
+		return std::string("#define ") + Table[Sampler] + " \n";
+	}
+
+	GLenum const GetTarget(sampler Sampler) const
+	{
+		static GLenum const Table[] = {
+			GL_TEXTURE_1D,				// SAMPLER_1D
+			GL_TEXTURE_1D_ARRAY,		// SAMPLER_1D_ARRAY
+			GL_TEXTURE_2D,				// SAMPLER_2D
+			GL_TEXTURE_2D_ARRAY,		// SAMPLER_2D_ARRAY
+			GL_TEXTURE_3D,				// SAMPLER_3D
+			GL_TEXTURE_CUBE_MAP,		// SAMPLER_CUBE
+			GL_TEXTURE_CUBE_MAP_ARRAY,	// SAMPLER_CUBE_ARRAY
+		};
+		static_assert((sizeof(Table) / sizeof(Table[0])) == SAMPLER_COUNT, "Invalid table size");
+
+		return Table[Sampler];
+	}
+
+	GLenum const GetInternalFormat(format Format) const
+	{
+		static GLenum const Table[] = {
+			GL_RGBA8,				// FORMAT_RGBA8_UNORM
+			GL_SRGB8_ALPHA8,		// FORMAT_RGBA8_SRGB
+			GL_RGB9_E5,				// FORMAT_RGB9E5UF
+			GL_R11F_G11F_B10F,		// FORMAT_RG11B10UF
+			GL_RGBA16F,				// FORMAT_RGBA16F
+			GL_RGBA32F				// FORMAT_RGBA32F
+		};
+		static_assert((sizeof(Table) / sizeof(Table[0])) == FORMAT_COUNT, "Invalid table size");
+
+		return Table[Format];
+	}
+
+	char const* GetString(format Format) const
+	{
+		static char const* Table[]
+		{
+			"rgba8unorm",
+			"rgba8srgb",
+			"rgb9e5uf",
+			"rg11b10uf",
+			"rgba16f",
+			"rgba32f"
+		};
+		static_assert((sizeof(Table) / sizeof(Table[0])) == FORMAT_COUNT, "Invalid table size");
+
+		return Table[Format];
+	}
+
 	bool initProgram()
 	{
 		GLuint VertShaderName = glCreateShader(GL_VERTEX_SHADER);
@@ -175,21 +246,7 @@ private:
 
 		FragShaderSource += ::format("#define FETCH_COUNT %d \n", this->FetchCount);
 
-		switch (this->Sampler)
-		{
-		case SAMPLER_1D:
-			FragShaderSource += "#define SAMPLER_1D \n";
-			break;
-		case SAMPLER_2D:
-			FragShaderSource += "#define SAMPLER_2D \n";
-			break;
-		case SAMPLER_3D:
-			FragShaderSource += "#define SAMPLER_3D \n";
-			break;
-		default:
-			assert(0);
-			break;
-		}
+		FragShaderSource += GetSamplerDefine(this->Sampler);
 
 		FragShaderSource += FRAG_SHADER_SOURCE;
 		char const* FragShaderSourcePointer = FragShaderSource.c_str();
@@ -262,22 +319,6 @@ private:
 		return true;
 	}
 
-	GLenum GetTarget(sampler Sampler)
-	{
-		switch(this->Sampler)
-		{
-		case SAMPLER_1D:
-			return GL_TEXTURE_1D;
-		case SAMPLER_2D:
-			return GL_TEXTURE_2D;
-		case SAMPLER_3D:
-			return GL_TEXTURE_3D;
-		default:
-			assert(0);
-			return GL_NONE;
-		}
-	}
-
 	bool initTexture()
 	{
 		glm::ivec2 WindowSize(this->getWindowSize());
@@ -321,111 +362,44 @@ private:
 				break;
 			}
 
-			glm::dvec4 const Pixel_f64vec4 = glm::dvec4(1.0f, 0.5f, 0.0f, 1.0f);
-			glm::vec4 const Pixel_f32vec4 = glm::vec4(Pixel_f64vec4);
-			glm::uint const Packed_u8vec4 = glm::packUnorm4x8(Pixel_f32vec4);
-			glm::uint const Packed_rgb9e5uf = glm::packF3x9_E1x5(glm::vec3(Pixel_f32vec4));
-			glm::uint const Packed_rg11b10uf = glm::packF2x11_1x10(glm::vec3(Pixel_f32vec4));
-			glm::u8vec4 const Pixel_u8vec4 = glm::u8vec4(Pixel_f32vec4 * float(std::numeric_limits<std::uint8_t>::max()));
-			glm::u32vec4 const Pixel_u32vec4 = glm::u32vec4(Pixel_f64vec4 * double(std::numeric_limits<std::uint32_t>::max()));
+			glm::vec4 Pixel = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f);
+			if (this->Format == FORMAT_RGBA8_SRGB)
+				Pixel = glm::convertLinearToSRGB(Pixel);
+
+			std::array<glm::vec4, 6> PixelArray;
+			for (std::size_t i = 0; i < PixelArray.size(); ++i)
+				PixelArray[i] = Pixel;
+
+			GLenum const InternalFormat = GetInternalFormat(this->Format);
 
 			switch(this->Sampler)
 			{
 			case SAMPLER_1D:
-				switch(this->Format)
-				{
-				case FORMAT_R8_UNORM:
-					glTexStorage1D(Target, GLint(1), GL_R8, 1);
-					glTexSubImage1D(Target, 0, 0, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
-					break;
-				case FORMAT_RGBA8_UNORM:
-					glTexStorage1D(Target, GLint(1), GL_RGBA8, 1);
-					glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
-					break;
-				case FORMAT_RGB9E5UF:
-					glTexStorage1D(Target, GLint(1), GL_RGB9_E5, 1);
-					glTexSubImage1D(Target, 0, 0, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
-					break;
-				case FORMAT_RG11B10UF:
-					glTexStorage1D(Target, GLint(1), GL_R11F_G11F_B10F, 1);
-					glTexSubImage1D(Target, 0, 0, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
-					break;
-				case FORMAT_RGBA16F:
-					glTexStorage1D(Target, GLint(1), GL_RGBA16F, 1);
-					glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-					break;
-				case FORMAT_RGBA32F:
-					glTexStorage1D(Target, GLint(1), GL_RGBA32F, 1);
-					glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-					break;
-				default:
-					assert(0);
-					break;
-				}
+				glTexStorage1D(Target, GLint(1), InternalFormat, 1);
+				glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
 				break;
+			case SAMPLER_1D_ARRAY:
 			case SAMPLER_2D:
-				switch(this->Format)
-				{
-				case FORMAT_R8_UNORM:
-					glTexStorage2D(Target, GLint(1), GL_R8, 1, 1);
-					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
-					break;
-				case FORMAT_RGBA8_UNORM:
-					glTexStorage2D(Target, GLint(1), GL_RGBA8, 1, 1);
-					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
-					break;
-				case FORMAT_RGB9E5UF:
-					glTexStorage2D(Target, GLint(1), GL_RGB9_E5, 1, 1);
-					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
-					break;
-				case FORMAT_RG11B10UF:
-					glTexStorage2D(Target, GLint(1), GL_R11F_G11F_B10F, 1, 1);
-					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
-					break;
-				case FORMAT_RGBA16F:
-					glTexStorage2D(Target, GLint(1), GL_RGBA16F, 1, 1);
-					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-					break;
-				case FORMAT_RGBA32F:
-					glTexStorage2D(Target, GLint(1), GL_RGBA32F, 1, 1);
-					glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-					break;
-				default:
-					assert(0);
-					break;
-				}
+				glTexStorage2D(Target, GLint(1), InternalFormat, 1, 1);
+				glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
 				break;
+			case SAMPLER_2D_ARRAY:
 			case SAMPLER_3D:
-				switch(this->Format)
-				{
-				case FORMAT_R8_UNORM:
-					glTexStorage3D(Target, GLint(1), GL_R8, 1, 1, 1);
-					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &Pixel_u8vec4[0]);
-					break;
-				case FORMAT_RGBA8_UNORM:
-					glTexStorage3D(Target, GLint(1), GL_RGBA8, 1, 1, 1);
-					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Packed_u8vec4);
-					break;
-				case FORMAT_RGB9E5UF:
-					glTexStorage3D(Target, GLint(1), GL_RGB9_E5, 1, 1, 1);
-					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGB, GL_UNSIGNED_INT_5_9_9_9_REV, &Packed_rgb9e5uf);
-					break;
-				case FORMAT_RG11B10UF:
-					glTexStorage3D(Target, GLint(1), GL_R11F_G11F_B10F, 1, 1, 1);
-					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGB, GL_UNSIGNED_INT_10F_11F_11F_REV, &Packed_rg11b10uf);
-					break;
-				case FORMAT_RGBA16F:
-					glTexStorage3D(Target, GLint(1), GL_RGBA16F, 1, 1, 1);
-					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-					break;
-				case FORMAT_RGBA32F:
-					glTexStorage3D(Target, GLint(1), GL_RGBA32F, 1, 1, 1);
-					glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, &Pixel_f32vec4[0]);
-					break;
-				default:
-					assert(0);
-					break;
-				}
+				glTexStorage3D(Target, GLint(1), InternalFormat, 1, 1, 1);
+				glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
+				break;
+			case SAMPLER_CUBE:
+				glTexStorage2D(Target, GLint(1), InternalFormat, 1, 1);
+				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 0, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[0][0]);
+				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 1, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[1][0]);
+				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[2][0]);
+				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[3][0]);
+				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 4, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[4][0]);
+				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 5, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[5][0]);
+				break;
+			case SAMPLER_CUBE_ARRAY:
+				glTexStorage3D(Target, GLint(1), InternalFormat, 1, 1, 6);
+				glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 6, GL_RGBA, GL_FLOAT, &PixelArray[0][0]);
 				break;
 			default:
 				assert(0);
@@ -511,8 +485,8 @@ private:
 				static_cast<double>(TimeMin) / 1000.0,
 				static_cast<double>(TimeMax) / 1000.0);
 
-			CSV.log(::format("%s ; %d ; %s ; %s",
-				this->title(), this->FetchCount, GetString(this->Filter), GetString(this->Format)).c_str(),
+			CSV.log(::format("%s ; %d ; %s ; %s ; %s",
+				this->title(), this->FetchCount, GetString(this->Sampler), GetString(this->Filter), GetString(this->Format)).c_str(),
 				static_cast<double>(TimeAvg) / 1000.0, static_cast<double>(TimeMin) / 1000.0, static_cast<double>(TimeMax) / 1000.0);
 		}
 		else
@@ -554,29 +528,32 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
+	for (int FilterIndex = 0; FilterIndex < sample_texture_fetch::FILTER_COUNT; ++FilterIndex)
+	for (int SamplerIndex = 0; SamplerIndex < sample_texture_fetch::SAMPLER_COUNT; ++SamplerIndex)
+	for (int FetchCount = 8; FetchCount <= 32; FetchCount <<= 1)
 	{
-		sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
-			16, sample_texture_fetch::FORMAT_RGBA16F, sample_texture_fetch::SAMPLER_3D, sample_texture_fetch::FILTER_TRILINEAR, 16);
+		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
+			FetchCount, sample_texture_fetch::FORMAT_RGBA8_UNORM, static_cast<sample_texture_fetch::sampler>(SamplerIndex), static_cast<sample_texture_fetch::filter>(FilterIndex), 1);
 		Error += Test();
 	}
 
-	sample_texture_fetch::format const Formats[] = {
-		sample_texture_fetch::FORMAT_RGBA8_UNORM,
-		sample_texture_fetch::FORMAT_RG11B10UF,
-		sample_texture_fetch::FORMAT_RGBA16F,
-		sample_texture_fetch::FORMAT_RGBA32F
-	};
-	int const FormatCount = sizeof(Formats) / sizeof(Formats[0]);
+/*
+	{
+		sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
+			16, sample_texture_fetch::FORMAT_RGBA8_SRGB, sample_texture_fetch::SAMPLER_CUBE, sample_texture_fetch::FILTER_TRILINEAR, 16);
+		Error += Test();
+	}
 
-	for (int Filter = 0; Filter < sample_texture_fetch::FILTER_COUNT; ++Filter)
-	for (int FormatIndex = 0; FormatIndex < FormatCount; ++FormatIndex)
+	for (int SamplerIndex = 0; SamplerIndex < sample_texture_fetch::SAMPLER_COUNT; ++SamplerIndex)
+	for (int FilterIndex = 0; FilterIndex < sample_texture_fetch::FILTER_COUNT; ++FilterIndex)
+	for (int FormatIndex = 0; FormatIndex < sample_texture_fetch::FORMAT_COUNT; ++FormatIndex)
 	for (int FetchCount = 1; FetchCount <= 32; FetchCount <<= 1)
 	{
 		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			FetchCount, Formats[FormatIndex], sample_texture_fetch::SAMPLER_2D, static_cast<sample_texture_fetch::filter>(Filter), 1);
+			FetchCount, static_cast<sample_texture_fetch::format>(FormatIndex), static_cast<sample_texture_fetch::sampler>(SamplerIndex), static_cast<sample_texture_fetch::filter>(FilterIndex), 1);
 		Error += Test();
 	}
-
+*/
 	CSV.save("../log-texture-fetch.csv");
 
 	return Error;
