@@ -528,12 +528,18 @@ int main(int argc, char* argv[])
 	std::size_t const Frames = 1000;
 	glm::uvec2 const WindowSize(2400, 1200);
 
+	sample_texture_fetch::sampler Samplers[] =
+	{
+		sample_texture_fetch::SAMPLER_2D,
+		sample_texture_fetch::SAMPLER_3D
+	};
+
 	for (int FilterIndex = 0; FilterIndex < sample_texture_fetch::FILTER_COUNT; ++FilterIndex)
-	for (int SamplerIndex = 0; SamplerIndex < sample_texture_fetch::SAMPLER_COUNT; ++SamplerIndex)
-	for (int FetchCount = 8; FetchCount <= 32; FetchCount <<= 1)
+	for (int SamplerIndex = 0; SamplerIndex < 2; ++SamplerIndex)
+	for (int FetchCount = 4; FetchCount <= 32; FetchCount <<= 1)
 	{
 		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			FetchCount, sample_texture_fetch::FORMAT_RGBA8_UNORM, static_cast<sample_texture_fetch::sampler>(SamplerIndex), static_cast<sample_texture_fetch::filter>(FilterIndex), 1);
+			FetchCount, sample_texture_fetch::FORMAT_RGBA32F, Samplers[SamplerIndex], static_cast<sample_texture_fetch::filter>(FilterIndex), 1);
 		Error += Test();
 	}
 
