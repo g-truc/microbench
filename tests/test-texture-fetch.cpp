@@ -41,22 +41,25 @@ namespace
 			layout(binding = 0) uniform samplerCubeArray Texture[FETCH_COUNT];
 #		endif
 
+		in vec4 gl_FragCoord;
+
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
 
 		void main()
 		{
 			Color = vec4(0);
+			vec2 Coord = gl_FragCoord.xy * NORMALIZE_COORD;
 
 			for(int i = 0; i < FETCH_COUNT; ++i)
 			{
 #				if defined(SAMPLER_1D)
-					Color += texture(Texture[i], 0.0) * (float(1.0) / float(FETCH_COUNT));
+					Color += texture(Texture[i], Coord.x) * (float(1.0) / float(FETCH_COUNT));
 #				elif defined(SAMPLER_2D) || defined(SAMPLER_1D_ARRAY)
-					Color += texture(Texture[i], vec2(0.0)) * (float(1.0) / float(FETCH_COUNT));
+					Color += texture(Texture[i], Coord) * (float(1.0) / float(FETCH_COUNT));
 #				elif defined(SAMPLER_2D_ARRAY) || defined(SAMPLER_3D) || defined(SAMPLER_CUBE)
-					Color += texture(Texture[i], vec3(0.0)) * (float(1.0) / float(FETCH_COUNT));
+					Color += texture(Texture[i], vec3(Coord, 0.0)) * (float(1.0) / float(FETCH_COUNT));
 #				elif defined(SAMPLER_CUBE_ARRAY)
-					Color += texture(Texture[i], vec4(0.0)) * (float(1.0) / float(FETCH_COUNT));
+					Color += texture(Texture[i], vec4(Coord, 0.0, 0.0)) * (float(1.0) / float(FETCH_COUNT));
 #				endif
 			}
 		}
@@ -120,7 +123,7 @@ public:
 		SAMPLER_COUNT = SAMPLER_LAST - SAMPLER_FIRST + 1
 	};
 
-	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, sampler Sampler, filter Filter, int AnisoSamples)
+	sample_texture_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, sampler Sampler, filter Filter, int AnisoSamples, size_t TextureSize)
 		: framework(argc, argv, "texture-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
 		, CSV(CSV)
 		, FetchCount(FetchCount)
@@ -128,6 +131,7 @@ public:
 		, Sampler(Sampler)
 		, Filter(Filter)
 		, AnisoSamples(AnisoSamples)
+		, TextureSize(static_cast<GLsizei>(TextureSize))
 		, TextureLocation(0)
 		, PipelineName(0)
 		, ProgramName(0)
@@ -139,11 +143,12 @@ public:
 
 private:
 	csv& CSV;
-	const int FetchCount;
-	const format Format;
-	const sampler Sampler;
-	const filter Filter;
-	const int AnisoSamples;
+	int const FetchCount;
+	format const Format;
+	sampler const Sampler;
+	filter const Filter;
+	int const AnisoSamples;
+	GLsizei const TextureSize;
 	std::vector<GLuint> TextureName;
 	std::vector<GLuint> BufferName;
 	GLint TextureLocation;
@@ -223,12 +228,12 @@ private:
 	{
 		static char const* Table[]
 		{
-			"rgba8unorm",
-			"rgba8srgb",
-			"rgb9e5uf",
-			"rg11b10uf",
-			"rgba16f",
-			"rgba32f"
+			"rgba8unorm",			// FORMAT_RGBA8_UNORM
+			"rgba8srgb",			// FORMAT_RGBA8_SRGB
+			"rgb9e5uf",				// FORMAT_RGB9E5UF
+			"rg11b10uf",			// FORMAT_RG11B10UF
+			"rgba16f",				// FORMAT_RGBA16F
+			"rgba32f"				// FORMAT_RGBA32F
 		};
 		static_assert((sizeof(Table) / sizeof(Table[0])) == FORMAT_COUNT, "Invalid table size");
 
@@ -245,6 +250,8 @@ private:
 		FragShaderSource += "#version 430 core \n";
 
 		FragShaderSource += ::format("#define FETCH_COUNT %d \n", this->FetchCount);
+
+		FragShaderSource += ::format("#define NORMALIZE_COORD vec2(%f, %f) \n", 1.0f / static_cast<float>(this->getWindowSize().x), 1.0f / static_cast<float>(this->getWindowSize().y));
 
 		FragShaderSource += GetSamplerDefine(this->Sampler);
 
@@ -321,7 +328,8 @@ private:
 
 	bool initTexture()
 	{
-		glm::ivec2 WindowSize(this->getWindowSize());
+		glm::ivec2 const WindowSize(this->getWindowSize());
+		GLsizei const TextureLevels = gli::levels(TextureSize);
 
 		this->TextureName.resize(this->FetchCount);
 
@@ -333,7 +341,7 @@ private:
 		{
 			glBindTexture(Target, TextureName[i]);
 			glTexParameteri(Target, GL_TEXTURE_BASE_LEVEL, 0);
-			glTexParameteri(Target, GL_TEXTURE_MAX_LEVEL, 0);
+			glTexParameteri(Target, GL_TEXTURE_MAX_LEVEL, TextureLevels - 1);
 			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_R, GL_RED);
 			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_G, GL_GREEN);
 			glTexParameteri(Target, GL_TEXTURE_SWIZZLE_B, GL_BLUE);
@@ -365,46 +373,35 @@ private:
 			glm::vec4 Pixel = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f);
 			if (this->Format == FORMAT_RGBA8_SRGB)
 				Pixel = glm::convertLinearToSRGB(Pixel);
-
-			std::array<glm::vec4, 6> PixelArray;
-			for (std::size_t i = 0; i < PixelArray.size(); ++i)
-				PixelArray[i] = Pixel;
+			std::vector<glm::vec4> Pixels;
 
 			GLenum const InternalFormat = GetInternalFormat(this->Format);
 
 			switch(this->Sampler)
 			{
 			case SAMPLER_1D:
-				glTexStorage1D(Target, GLint(1), InternalFormat, 1);
-				glTexSubImage1D(Target, 0, 0, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
+				glTexStorage1D(Target, TextureLevels, InternalFormat, TextureSize);
 				break;
 			case SAMPLER_1D_ARRAY:
 			case SAMPLER_2D:
-				glTexStorage2D(Target, GLint(1), InternalFormat, 1, 1);
-				glTexSubImage2D(Target, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
+				glTexStorage2D(Target, TextureLevels, InternalFormat, TextureSize, TextureSize);
 				break;
 			case SAMPLER_2D_ARRAY:
 			case SAMPLER_3D:
-				glTexStorage3D(Target, GLint(1), InternalFormat, 1, 1, 1);
-				glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, &Pixel[0]);
+				glTexStorage3D(Target, TextureLevels, InternalFormat, TextureSize, TextureSize, TextureSize);
 				break;
 			case SAMPLER_CUBE:
-				glTexStorage2D(Target, GLint(1), InternalFormat, 1, 1);
-				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 0, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[0][0]);
-				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 1, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[1][0]);
-				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[2][0]);
-				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[3][0]);
-				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 4, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[4][0]);
-				glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + 5, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, &PixelArray[5][0]);
+				glTexStorage2D(Target, TextureLevels, InternalFormat, TextureSize, TextureSize);
 				break;
 			case SAMPLER_CUBE_ARRAY:
-				glTexStorage3D(Target, GLint(1), InternalFormat, 1, 1, 6);
-				glTexSubImage3D(Target, 0, 0, 0, 0, 1, 1, 6, GL_RGBA, GL_FLOAT, &PixelArray[0][0]);
 				break;
 			default:
 				assert(0);
 				break;
 			}
+
+			for (GLsizei Level = 0; Level < TextureLevels; ++Level)
+				glClearTexImage(TextureName[i], Level, GL_RGBA, GL_FLOAT, &Pixel[0]);
 		}
 
 		return true;
@@ -485,8 +482,8 @@ private:
 				static_cast<double>(TimeMin) / 1000.0,
 				static_cast<double>(TimeMax) / 1000.0);
 
-			CSV.log(::format("%s ; %d ; %s ; %s ; %s",
-				this->title(), this->FetchCount, GetString(this->Sampler), GetString(this->Filter), GetString(this->Format)).c_str(),
+			CSV.log(::format("%s ; %d ; %s ; %s ; %s ; %d ",
+				this->title(), this->FetchCount, GetString(this->Sampler), GetString(this->Filter), GetString(this->Format), TextureSize).c_str(),
 				static_cast<double>(TimeAvg) / 1000.0, static_cast<double>(TimeMin) / 1000.0, static_cast<double>(TimeMax) / 1000.0);
 		}
 		else
@@ -523,11 +520,20 @@ int main(int argc, char* argv[])
 	int Error = 0;
 
 	csv CSV;
-	CSV.header("texture-fetch ; FetchCount ; Filter ; Format");
+	CSV.header("texture-fetch ; FetchCount ; Filter ; Format ; TextureSize");
 
 	std::size_t const Frames = 1000;
-	glm::uvec2 const WindowSize(2400, 1200);
+	glm::uvec2 const WindowSize(1024, 1024);
 
+	for (int FetchCount = 4; FetchCount <= 32; FetchCount <<= 1)
+	for (int TextureSize = 1; TextureSize <= 4096; TextureSize <<= 1)
+	{
+		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
+			FetchCount, sample_texture_fetch::FORMAT_RGBA8_UNORM, sample_texture_fetch::SAMPLER_2D, sample_texture_fetch::FILTER_TRILINEAR, 1, TextureSize);
+		Error += Test();
+	}
+
+/*
 	sample_texture_fetch::sampler Samplers[] =
 	{
 		sample_texture_fetch::SAMPLER_2D,
@@ -539,10 +545,10 @@ int main(int argc, char* argv[])
 	for (int FetchCount = 4; FetchCount <= 32; FetchCount <<= 1)
 	{
 		sample_texture_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			FetchCount, sample_texture_fetch::FORMAT_RGBA32F, Samplers[SamplerIndex], static_cast<sample_texture_fetch::filter>(FilterIndex), 1);
+			FetchCount, sample_texture_fetch::FORMAT_RGBA32F, Samplers[SamplerIndex], static_cast<sample_texture_fetch::filter>(FilterIndex), 1, 1024);
 		Error += Test();
 	}
-
+*/
 /*
 	{
 		sample_texture_fetch Test(argc, argv, CSV, WindowSize, 0,
