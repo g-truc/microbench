@@ -38,13 +38,42 @@ namespace
 #			ifdef DEPENDENT_FETCH
 				for(int i = 0; i < FETCH_COUNT; ++i)
 					Coord = texture(Texture[i], Coord).xy;
-
 				Color = vec4(Coord, 0.0, 1.0);
+#			else
+				vec2 Temp01 = texture(Texture[0], Coord).xy;
+				vec2 Temp02 = texture(Texture[1], Coord).xy;
+				vec2 Temp03 = texture(Texture[2], Coord).xy;
+				vec2 Temp04 = texture(Texture[3], Coord).xy;
+				vec2 Temp05 = texture(Texture[4], Coord).xy;
+				vec2 Temp06 = texture(Texture[5], Coord).xy;
+				vec2 Temp07 = texture(Texture[6], Coord).xy;
+				vec2 Temp08 = texture(Texture[7], Coord).xy;
+				vec2 Temp09 = texture(Texture[8], Coord).xy;
+				vec2 Temp10 = texture(Texture[9], Coord).xy;
+				vec2 Temp11 = texture(Texture[10], Coord).xy;
+				vec2 Temp12 = texture(Texture[11], Coord).xy;
+				vec2 Temp13 = texture(Texture[12], Coord).xy;
+				vec2 Temp14 = texture(Texture[13], Coord).xy;
+				vec2 Temp15 = texture(Texture[14], Coord).xy;
+				vec2 Temp16 = texture(Texture[15], Coord).xy;
+
+				vec2 TempA = Temp01 + Temp02;
+				vec2 TempB = Temp03 + Temp04;
+				vec2 TempC = Temp05 + Temp06;
+				vec2 TempD = Temp07 + Temp08;
+				vec2 TempE = Temp09 + Temp10;
+				vec2 TempF = Temp11 + Temp12;
+				vec2 TempG = Temp13 + Temp14;
+				vec2 TempH = Temp15 + Temp16;
+
+				Color = vec4((TempA + TempB) + (TempC + TempD) + (TempE + TempF) + (TempG + TempH), 0.0, 1.0);
+/*
 #			else
 				vec2 Temp = vec2(0);
 				for(int i = 0; i < FETCH_COUNT; ++i)
-					Temp += texture(Texture[i], Coord).xy * (1.0 / float(FETCH_COUNT));
+					Temp += texture(Texture[i], Coord).xy;
 				Color = vec4(Temp, 0.0, 1.0);
+*/
 #			endif
 		}
 	)";
@@ -67,12 +96,13 @@ public:
 		FORMAT_COUNT = FORMAT_LAST - FORMAT_FIRST + 1
 	};
 
-	sample_dependent_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, bool DependentFetch)
+	sample_dependent_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, int FetchCount, format Format, bool DependentFetch, std::size_t TextureSize)
 		: framework(argc, argv, "dependent-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
 		, CSV(CSV)
 		, FetchCount(FetchCount)
 		, Format(Format)
 		, DependentFetch(DependentFetch)
+		, TextureSize(static_cast<GLsizei>(TextureSize))
 		, TextureLocation(0)
 		, PipelineName(0)
 		, ProgramName(0)
@@ -87,6 +117,7 @@ private:
 	int const FetchCount;
 	format const Format;
 	bool const DependentFetch;
+	GLsizei const TextureSize;
 	std::vector<GLuint> TextureName;
 	std::vector<GLuint> BufferName;
 	GLint TextureLocation;
@@ -216,11 +247,17 @@ private:
 
 	bool initTexture()
 	{
-		glm::ivec2 const WindowSize(this->getWindowSize());
-
 		this->TextureName.resize(this->FetchCount);
-
 		glGenTextures(this->FetchCount, &TextureName[0]);
+
+		std::vector<glm::vec2> TextureData;
+		TextureData.resize(this->TextureSize * this->TextureSize);
+
+		float const Factor = 1.0f;//this->DependentFetch ? 1.0f : (1.0f / float(this->FetchCount));
+
+		for (GLsizei y = 0; y < TextureSize; ++y)
+		for (GLsizei x = 0; x < TextureSize; ++x)
+			TextureData[x + y * TextureSize] = (glm::vec2(x, y) / float(TextureSize - 1)) * Factor;
 
 		for (int i = 0; i < this->FetchCount; ++i)
 		{
@@ -237,17 +274,8 @@ private:
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, 1);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-			std::array<glm::vec4, 4> Pixels;
-			Pixels[0] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-			Pixels[1] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-			Pixels[2] = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-			Pixels[3] = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-
-			GLsizei const TextureSize = 2;
-
-			glTexStorage2D(GL_TEXTURE_2D, 1, GetInternalFormat(this->Format), TextureSize, TextureSize);
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_FLOAT, &Pixels[0][0]);
+			glTexStorage2D(GL_TEXTURE_2D, 1, GetInternalFormat(this->Format), this->TextureSize, this->TextureSize);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, this->TextureSize, this->TextureSize, GL_RG, GL_FLOAT, &TextureData[0][0]);
 		}
 
 		return true;
@@ -374,7 +402,7 @@ int main(int argc, char* argv[])
 	for (int FetchCount = 16; FetchCount <= 16; FetchCount <<= 1)
 	{
 		sample_dependent_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			FetchCount, sample_dependent_fetch::FORMAT_RGBA8_UNORM, true);
+			FetchCount, sample_dependent_fetch::FORMAT_RGBA8_UNORM, false, 2048);
 		Error += Test();
 	}
 
