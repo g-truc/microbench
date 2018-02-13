@@ -20,7 +20,11 @@ namespace
 
 	char const* FRAG_SHADER_SOURCE = R"(
 		#define FRAG_COLOR	0
-
+/*
+		#pragma optionNV(fastmath off)
+		#pragma optionNV(fastprecision off)
+		#pragma optionNV(unroll none)
+*/
 #		ifndef FETCH_COUNT
 #			error FETCH_COUNT must be defined to a value between 1 and 8 included
 #		endif
@@ -37,8 +41,9 @@ namespace
 
 #			ifdef DEPENDENT_FETCH
 				for(int i = 0; i < FETCH_COUNT; ++i)
-					Coord = texture(Texture[i], Coord).xy;
+					Coord += texture(Texture[i], Coord).xy * 0.000001;
 				Color = vec4(Coord, 0.0, 1.0);
+/*
 #			else
 				vec2 Temp01 = texture(Texture[0], Coord).xy;
 				vec2 Temp02 = texture(Texture[1], Coord).xy;
@@ -66,14 +71,13 @@ namespace
 				vec2 TempG = Temp13 + Temp14;
 				vec2 TempH = Temp15 + Temp16;
 
-				Color = vec4((TempA + TempB) + (TempC + TempD) + (TempE + TempF) + (TempG + TempH), 0.0, 1.0);
-/*
+				Color = vec4(((TempA + TempB) + (TempC + TempD) + (TempE + TempF) + (TempG + TempH)), 0.0, 1.0);
+*/
 #			else
 				vec2 Temp = vec2(0);
 				for(int i = 0; i < FETCH_COUNT; ++i)
-					Temp += texture(Texture[i], Coord).xy;
+					Temp += texture(Texture[i], Coord).xy * (1.0 / float(FETCH_COUNT));
 				Color = vec4(Temp, 0.0, 1.0);
-*/
 #			endif
 		}
 	)";
@@ -402,11 +406,11 @@ int main(int argc, char* argv[])
 	for (int FetchCount = 16; FetchCount <= 16; FetchCount <<= 1)
 	{
 		sample_dependent_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			FetchCount, sample_dependent_fetch::FORMAT_RGBA8_UNORM, false, 2048);
+			FetchCount, sample_dependent_fetch::FORMAT_RGBA8_UNORM, true, 2048);
 		Error += Test();
 	}
 
-	CSV.save("../log-dependent-fetch.csv");
+	CSV.save("../log-dependent-fetch-dependent.csv");
 
 	return Error;
 }

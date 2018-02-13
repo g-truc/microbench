@@ -53,7 +53,7 @@ namespace
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
 
-		vec3 convertSrgbToRgb(in vec3 ColorSRGB, in float Gamma)
+		vec3 correctSrgbToRgb(in vec3 ColorSRGB, in float Gamma)
 		{
 			return mix(
 				pow((ColorSRGB + 0.055) * 0.94786729857819905213270142180095, vec3(Gamma)),
@@ -61,34 +61,34 @@ namespace
 				lessThanEqual(ColorSRGB, vec3(0.04045)));
 		}
 
-		vec3 convertSrgbToRgb(in vec3 ColorSRGB)
+		vec3 correctSrgbToRgb(in vec3 ColorSRGB)
 		{
-			return convertSrgbToRgb(ColorSRGB, 2.4);
+			return correctSrgbToRgb(ColorSRGB, 2.4);
 		}
 
-		vec4 convertSrgbToRgb(in vec4 ColorSRGB, in float Gamma)
+		vec4 correctSrgbToRgb(in vec4 ColorSRGB, in float Gamma)
 		{
-			return vec4(convertSrgbToRgb(ColorSRGB.rgb, Gamma), ColorSRGB.a);
+			return vec4(correctSrgbToRgb(ColorSRGB.rgb, Gamma), ColorSRGB.a);
 		}
 
-		vec4 convertSrgbToRgb(in vec4 ColorSRGB)
+		vec4 correctSrgbToRgb(in vec4 ColorSRGB)
 		{
-			return vec4(convertSrgbToRgb(ColorSRGB.rgb, 2.4), ColorSRGB.a);
+			return vec4(correctSrgbToRgb(ColorSRGB.rgb, 2.4), ColorSRGB.a);
 		}
 
-		vec4 fastSrgbToRgb(in vec4 ColorSRGB)
+		vec4 gammaSrgbToRgb(in vec4 ColorSRGB)
 		{
 			return vec4(pow(ColorSRGB.rgb, vec3(2.2)), ColorSRGB.a);
 		}
 
-		vec3 approxSrgbToRGB(in vec3 ColorSRGB)
+		vec3 taylorSrgbToRgb(in vec3 ColorSRGB)
 		{
 			return ColorSRGB * (ColorSRGB * (ColorSRGB * 0.305306011 + 0.682171111) + 0.012522878);
 		}
 
-		vec4 approxSrgbToRGB(in vec4 ColorSRGB)
+		vec4 taylorSrgbToRgb(in vec4 ColorSRGB)
 		{
-			return vec4(approxSrgbToRGB(ColorSRGB.rgb), ColorSRGB.a);
+			return vec4(taylorSrgbToRgb(ColorSRGB.rgb), ColorSRGB.a);
 		}
 
 		void main()
@@ -113,8 +113,12 @@ namespace
 #					endif
 #				endif
 
-#				if defined(ENABLE_SRGB_TO_LINEAR)
-					Texel = fastSrgbToRgb(Texel);
+#				if defined(SRGB_CORRECT)
+					Texel = correctSrgbToRgb(Texel);
+#				elif defined(SRGB_GAMMA)
+					Texel = gammaSrgbToRgb(Texel);
+#				elif defined(SRGB_TAYLOR)
+					Texel = taylorSrgbToRgb(Texel);
 #				endif
 
 				Color += Texel;
@@ -201,12 +205,62 @@ public:
 		return Table[Filter];
 	}
 
-	sample_shader_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, mode Mode, int FetchCount, format Format, filter Filter)
+	enum color
+	{
+		COLOR_ORANGE, COLOR_FIRST = COLOR_ORANGE,
+		COLOR_WHITE,
+		COLOR_BLACK, COLOR_LAST = COLOR_BLACK
+	};
+
+	enum
+	{
+		COLOR_COUNT = COLOR_LAST - COLOR_FIRST + 1
+	};
+
+	char const* GetString(color Color) const
+	{
+		static char const* Table[]
+		{
+			"orange",
+			"white",
+			"black"
+		};
+		return Table[Color];
+	}
+
+	enum srgb
+	{
+		SRGB_LINEAR, SRGB_FIRST = SRGB_LINEAR,
+		SRGB_CORRECT,
+		SRGB_GAMMA,
+		SRGB_TAYLOR, SRGB_LAST = SRGB_TAYLOR
+	};
+
+	enum
+	{
+		SRGB_COUNT = SRGB_LAST - SRGB_FIRST + 1
+	};
+
+	char const* GetString(srgb SRGB) const
+	{
+		static char const* Table[]
+		{
+			"srgb linear",
+			"srgb correct",
+			"srgb gamma",
+			"srgb taylor"
+		};
+		return Table[SRGB];
+	}
+
+	sample_shader_fetch(int argc, char* argv[], csv& CSV, glm::uvec2 WindowSize, std::size_t Frames, mode Mode, int FetchCount, format Format, srgb SRGB, color Color, filter Filter)
 		: framework(argc, argv, "shader-fetch", framework::CORE, 4, 3, WindowSize, glm::vec2(0), glm::vec2(0), Frames, framework::RUN_ONLY)
 		, CSV(CSV)
 		, Mode(Mode)
 		, FetchCount(FetchCount)
 		, Format(Format)
+		, SRGB(SRGB)
+		, Color(Color)
 		, Filter(Filter)
 		, TextureLocation(0)
 		, PipelineName(0)
@@ -222,6 +276,8 @@ private:
 	const mode Mode;
 	const int FetchCount;
 	const format Format;
+	const srgb SRGB;
+	const color Color;
 	const filter Filter;
 	std::vector<GLuint> TextureName;
 	std::vector<GLuint> BufferName;
@@ -254,24 +310,32 @@ private:
 			FragShaderSource += "#define MODE_TEXTURE_FETCH 1 \n";
 			break;
 		case MODE_IMAGE_LOAD:
-			if (this->Format == FORMAT_RGBA8_SRGB)
-				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_IMAGE_LOAD 1 \n";
 			break;
 		case MODE_BINDLESS_IMAGE_LOAD:
-			if (this->Format == FORMAT_RGBA8_SRGB)
-				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_BINDLESS_IMAGE_LOAD 1 \n";
 			break;
 		case MODE_BUFFER_UNIFORM:
-			if (this->Format == FORMAT_RGBA8_SRGB)
-				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_UNIFORM_BUFFER 1 \n";
 		case MODE_BUFFER_SHADER:
-			if (this->Format == FORMAT_RGBA8_SRGB)
-				FragShaderSource += "#define ENABLE_SRGB_TO_LINEAR 1 \n";
 			FragShaderSource += "#define MODE_SHADER_BUFFER 1 \n";
 			break;
+		}
+
+		if (this->Mode == MODE_IMAGE_LOAD || this->Mode == MODE_BINDLESS_IMAGE_LOAD || this->Mode == MODE_BUFFER_UNIFORM || this->Mode == MODE_BUFFER_SHADER)
+		{
+			switch(this->SRGB)
+			{
+			case SRGB_CORRECT:
+				FragShaderSource += "#define SRGB_CORRECT 1 \n";
+				break;
+			case SRGB_GAMMA:
+				FragShaderSource += "#define SRGB_GAMMA 1 \n";
+				break;
+			case SRGB_TAYLOR:
+				FragShaderSource += "#define SRGB_TAYLOR 1 \n";
+				break;
+			}
 		}
 
 		switch (this->Format)
@@ -360,6 +424,20 @@ private:
 		return true;
 	}
 
+	glm::vec4 GetColor()
+	{
+		switch (this->Color)
+		{
+		default:
+		case COLOR_ORANGE:
+			return glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
+		case COLOR_WHITE:
+			return glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) / static_cast<float>(this->FetchCount);
+		case COLOR_BLACK:
+			return glm::vec4(0.0f, 0.0f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
+		}
+	}
+
 	bool initTexture()
 	{
 		glm::ivec2 WindowSize(this->getWindowSize());
@@ -394,9 +472,9 @@ private:
 				break;
 			}
 
-			glm::vec4 Pixel32f = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
+			glm::vec4 Pixel32f = this->GetColor();
 
-			if (this->Format == FORMAT_RGBA8_SRGB)
+			if (this->SRGB != SRGB_LINEAR)
 				Pixel32f = glm::convertLinearToSRGB(Pixel32f);
 
 			glm::uint Pixel8UNorm = glm::packUnorm4x8(Pixel32f);
@@ -408,7 +486,7 @@ private:
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Pixel8UNorm);
 				break;
 			case FORMAT_RGBA8_SRGB:
-				glTexStorage2D(GL_TEXTURE_2D, GLint(1), this->Mode == MODE_IMAGE_LOAD ? GL_RGBA8 : GL_SRGB8_ALPHA8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
+				glTexStorage2D(GL_TEXTURE_2D, GLint(1), this->Mode == MODE_IMAGE_LOAD || this->Mode == MODE_BINDLESS_IMAGE_LOAD ? GL_RGBA8 : GL_SRGB8_ALPHA8, GLsizei(WindowSize.x), GLsizei(WindowSize.y));
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &Pixel8UNorm);
 				break;
 			case FORMAT_RGBA32F:
@@ -425,9 +503,9 @@ private:
 
 	bool initBuffer()
 	{
-		glm::vec4 Pixel32f = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f) / static_cast<float>(this->FetchCount);
+		glm::vec4 Pixel32f = GetColor();
 
-		if (this->Format == FORMAT_RGBA8_SRGB)
+		if (this->SRGB != SRGB_LINEAR)
 			Pixel32f = glm::convertLinearToSRGB(Pixel32f);
 
 		glm::uint Pixel8UNorm = glm::packUnorm4x8(Pixel32f);
@@ -580,7 +658,7 @@ private:
 				static_cast<double>(TimeMax) / 1000.0);
 
 			CSV.log(::format("%s ; %d ; %s ; %s ; %s",
-				this->title(), this->FetchCount, GetString(this->Mode), GetString(this->Filter), GetString(this->Format)).c_str(),
+				this->title(), this->FetchCount, GetString(this->Mode), GetString(this->Format), GetString(this->SRGB)).c_str(),
 				static_cast<double>(TimeAvg) / 1000.0, static_cast<double>(TimeMin) / 1000.0, static_cast<double>(TimeMax) / 1000.0);
 		}
 		else
@@ -616,25 +694,39 @@ int main(int argc, char* argv[])
 {
 	int Error = 0;
 
-	csv CSV;
-	CSV.header("texture-fetch ; FetchCount ; Mode ; Filter ; Format");
-
-	std::size_t const Frames = 1000;
-	glm::uvec2 const WindowSize(2400, 1200);
-
-	sample_shader_fetch Test(argc, argv, CSV, WindowSize, 0,
-		sample_shader_fetch::MODE_BUFFER_UNIFORM, 4, sample_shader_fetch::FORMAT_RGBA8_SRGB, sample_shader_fetch::FILTER_NEAREST);
-	Error += Test();
-
-	for (int Mode = 0; Mode < sample_shader_fetch::MODE_COUNT; ++Mode)
-	for (int Format = 0; Format < sample_shader_fetch::FORMAT_COUNT; ++Format)
-	for (int FetchCount = 1; FetchCount <= 8; ++FetchCount)
+	// warmup
 	{
-		sample_shader_fetch Test(argc, argv, CSV, WindowSize, Frames,
-			static_cast<sample_shader_fetch::mode>(Mode), FetchCount, static_cast<sample_shader_fetch::format>(Format), sample_shader_fetch::FILTER_NEAREST);
+		csv CSV;
+		sample_shader_fetch Test(argc, argv, CSV, glm::uvec2(1920, 1080), 100,
+			sample_shader_fetch::MODE_BUFFER_UNIFORM, 8, sample_shader_fetch::FORMAT_RGBA32F, sample_shader_fetch::SRGB_CORRECT, sample_shader_fetch::COLOR_ORANGE, sample_shader_fetch::FILTER_NEAREST);
 		Error += Test();
 	}
 
+	csv CSV;
+	CSV.header("texture-fetch ; FetchCount ; Mode ; Format ; SRGB");
+
+	std::size_t const Frames = 200;
+	glm::uvec2 const WindowSize(2560, 1440);
+
+	for (int SRGB = 0; SRGB < sample_shader_fetch::SRGB_COUNT; ++SRGB)
+	for (int FetchCount = 1; FetchCount <= 8; ++FetchCount)
+	{
+		sample_shader_fetch Test(argc, argv, CSV, WindowSize, Frames,
+			sample_shader_fetch::MODE_BUFFER_UNIFORM, FetchCount, sample_shader_fetch::FORMAT_RGBA32F, static_cast<sample_shader_fetch::srgb>(SRGB), sample_shader_fetch::COLOR_ORANGE, sample_shader_fetch::FILTER_NEAREST);
+		Error += Test();
+	}
+
+/*
+	for (int Mode = 0; Mode < sample_shader_fetch::MODE_COUNT; ++Mode)
+	for (int Format = 0; Format < sample_shader_fetch::FORMAT_COUNT; ++Format)
+	for (int SRGB = 0; SRGB < sample_shader_fetch::SRGB_COUNT; ++SRGB)
+	for (int FetchCount = 1; FetchCount <= 8; ++FetchCount)
+	{
+		sample_shader_fetch Test(argc, argv, CSV, WindowSize, Frames,
+			static_cast<sample_shader_fetch::mode>(Mode), FetchCount, static_cast<sample_shader_fetch::format>(Format), static_cast<sample_shader_fetch::srgb>(SRGB), sample_shader_fetch::COLOR_ORANGE, sample_shader_fetch::FILTER_NEAREST);
+		Error += Test();
+	}
+*/
 	CSV.save("../log-shader-fetch.csv");
 
 	return Error;

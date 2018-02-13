@@ -96,7 +96,7 @@ framework::framework
 	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 	glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
 	glfwWindowHint(GLFW_SRGB_CAPABLE, GL_FALSE);
-	glfwWindowHint(GLFW_DECORATED, GL_TRUE);
+	glfwWindowHint(GLFW_DECORATED, GL_FALSE);
 	glfwWindowHint(GLFW_CLIENT_API, Profile == ES ? GLFW_OPENGL_ES_API : GLFW_OPENGL_API);
 
 	if(version(this->Major, this->Minor) >= version(3, 2) || (Profile == ES))
@@ -131,7 +131,7 @@ framework::framework
 
 	if(this->Window)
 	{
-		glfwSetWindowPos(this->Window, 64, 64);
+		glfwSetWindowPos(this->Window, 0, 0);
 		glfwSetWindowUserPointer(this->Window, this);
 		glfwSetMouseButtonCallback(this->Window, framework::mouseButtonCallback);
 		glfwSetCursorPosCallback(this->Window, framework::cursorPositionCallback);
