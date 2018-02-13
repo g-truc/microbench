@@ -25,10 +25,6 @@ namespace
 		#pragma optionNV(fastprecision off)
 		#pragma optionNV(unroll none)
 */
-#		ifndef FETCH_COUNT
-#			error FETCH_COUNT must be defined to a value between 1 and 8 included
-#		endif
-
 		layout(binding = 0) uniform sampler2D Texture[FETCH_COUNT];
 
 		in vec4 gl_FragCoord;
@@ -41,43 +37,13 @@ namespace
 
 #			ifdef DEPENDENT_FETCH
 				for(int i = 0; i < FETCH_COUNT; ++i)
-					Coord += texture(Texture[i], Coord).xy * 0.000001;
-				Color = vec4(Coord, 0.0, 1.0);
-/*
-#			else
-				vec2 Temp01 = texture(Texture[0], Coord).xy;
-				vec2 Temp02 = texture(Texture[1], Coord).xy;
-				vec2 Temp03 = texture(Texture[2], Coord).xy;
-				vec2 Temp04 = texture(Texture[3], Coord).xy;
-				vec2 Temp05 = texture(Texture[4], Coord).xy;
-				vec2 Temp06 = texture(Texture[5], Coord).xy;
-				vec2 Temp07 = texture(Texture[6], Coord).xy;
-				vec2 Temp08 = texture(Texture[7], Coord).xy;
-				vec2 Temp09 = texture(Texture[8], Coord).xy;
-				vec2 Temp10 = texture(Texture[9], Coord).xy;
-				vec2 Temp11 = texture(Texture[10], Coord).xy;
-				vec2 Temp12 = texture(Texture[11], Coord).xy;
-				vec2 Temp13 = texture(Texture[12], Coord).xy;
-				vec2 Temp14 = texture(Texture[13], Coord).xy;
-				vec2 Temp15 = texture(Texture[14], Coord).xy;
-				vec2 Temp16 = texture(Texture[15], Coord).xy;
-
-				vec2 TempA = Temp01 + Temp02;
-				vec2 TempB = Temp03 + Temp04;
-				vec2 TempC = Temp05 + Temp06;
-				vec2 TempD = Temp07 + Temp08;
-				vec2 TempE = Temp09 + Temp10;
-				vec2 TempF = Temp11 + Temp12;
-				vec2 TempG = Temp13 + Temp14;
-				vec2 TempH = Temp15 + Temp16;
-
-				Color = vec4(((TempA + TempB) + (TempC + TempD) + (TempE + TempF) + (TempG + TempH)), 0.0, 1.0);
-*/
+					Coord = texture(Texture[i], Coord).xy + 0.000001;
+				Color = vec4(Coord * 1.000001, 0.0, 1.0);
 #			else
 				vec2 Temp = vec2(0);
 				for(int i = 0; i < FETCH_COUNT; ++i)
-					Temp += texture(Texture[i], Coord).xy * (1.0 / float(FETCH_COUNT));
-				Color = vec4(Temp, 0.0, 1.0);
+					Temp = texture(Texture[i], Coord).xy + Temp;
+				Color = vec4(Temp * (1.0 / float(FETCH_COUNT)), 0.0, 1.0);
 #			endif
 		}
 	)";
@@ -257,11 +223,9 @@ private:
 		std::vector<glm::vec2> TextureData;
 		TextureData.resize(this->TextureSize * this->TextureSize);
 
-		float const Factor = 1.0f;//this->DependentFetch ? 1.0f : (1.0f / float(this->FetchCount));
-
 		for (GLsizei y = 0; y < TextureSize; ++y)
 		for (GLsizei x = 0; x < TextureSize; ++x)
-			TextureData[x + y * TextureSize] = (glm::vec2(x, y) / float(TextureSize - 1)) * Factor;
+			TextureData[x + y * TextureSize] = (glm::vec2(x, y) / float(TextureSize - 1));
 
 		for (int i = 0; i < this->FetchCount; ++i)
 		{
@@ -400,17 +364,17 @@ int main(int argc, char* argv[])
 	csv CSV;
 	CSV.header("dependent-fetch ; FetchCount ; Filter ; Format ; TextureSize");
 
-	std::size_t const Frames = 0;
+	std::size_t const Frames = 500;
 	glm::uvec2 const WindowSize(1024, 1024);
 
-	for (int FetchCount = 16; FetchCount <= 16; FetchCount <<= 1)
+	for (int FetchCount = 1; FetchCount <= 32; FetchCount <<= 1)
 	{
 		sample_dependent_fetch Test(argc, argv, CSV, WindowSize, Frames,
 			FetchCount, sample_dependent_fetch::FORMAT_RGBA8_UNORM, true, 2048);
 		Error += Test();
 	}
 
-	CSV.save("../log-dependent-fetch-dependent.csv");
+	CSV.save("../log-dependent-fetch.csv");
 
 	return Error;
 }
