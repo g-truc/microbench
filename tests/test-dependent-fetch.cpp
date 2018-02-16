@@ -31,18 +31,37 @@ namespace
 
 		layout(location = FRAG_COLOR, index = 0) out vec4 Color;
 
+		vec2 alus(vec2 Coord)
+		{
+			vec4 Tmp = vec4(Coord, Coord);
+			for(int i = 0; i < 100; ++i)
+			{
+				Tmp *= vec4(1.000001, 1.000002, 1.000003, 1.000004);
+				Tmp -= vec4(0.000001, 0.000002, 0.000003, 0.000004);
+				Tmp /= vec4(1.000001, 1.000002, 1.000003, 1.000004);
+				Tmp += vec4(0.000001, 0.000002, 0.000003, 0.000004);
+			}
+			return (Tmp.xy + Tmp.zw) * 0.5;
+		}
+
 		void main()
 		{
 			vec2 Coord = gl_FragCoord.xy * NORMALIZE_COORD;
 
 #			ifdef DEPENDENT_FETCH
 				for(int i = 0; i < FETCH_COUNT; ++i)
+				{
 					Coord = texture(Texture[i], Coord).xy + 0.000001;
+					Coord = alus(Coord);
+				}
 				Color = vec4(Coord * 1.000001, 0.0, 1.0);
 #			else
 				vec2 Temp = vec2(0);
 				for(int i = 0; i < FETCH_COUNT; ++i)
+				{
 					Temp = texture(Texture[i], Coord).xy + Temp;
+					Temp = alus(Temp);
+				}
 				Color = vec4(Temp * (1.0 / float(FETCH_COUNT)), 0.0, 1.0);
 #			endif
 		}
@@ -364,10 +383,10 @@ int main(int argc, char* argv[])
 	csv CSV;
 	CSV.header("dependent-fetch ; FetchCount ; Filter ; Format ; TextureSize");
 
-	std::size_t const Frames = 500;
+	std::size_t const Frames = 0;
 	glm::uvec2 const WindowSize(1024, 1024);
 
-	for (int FetchCount = 1; FetchCount <= 32; FetchCount <<= 1)
+	for (int FetchCount = 8; FetchCount <= 8; FetchCount <<= 1)
 	{
 		sample_dependent_fetch Test(argc, argv, CSV, WindowSize, Frames,
 			FetchCount, sample_dependent_fetch::FORMAT_RGBA8_UNORM, true, 2048);

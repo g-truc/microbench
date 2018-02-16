@@ -1,0 +1,132 @@
+    1 |   3 |   ::: | label_basic_block_1: s_mov_b64 s[28:29], exec
+    2 |   3 |   ::: | s_wqm_b64 exec, exec
+    3 |   3 |   ::: | s_mov_b32 s0, s1
+    4 |   3 |   ::: | s_movk_i32 s1, 0x0000
+    5 |   3 |   ::: | s_mov_b32 s4, s2
+    6 |   3 |   ::: | s_movk_i32 s5, 0x0000
+    7 |   3 |   ::: | s_mov_b32 s2, s3
+    8 |   3 |   ::: | s_movk_i32 s3, 0x0000
+    9 |   3 |   ::: | s_load_dwordx4 s[8:11], s[2:3], 0x140
+   10 |   3 |   ::: | s_waitcnt lgkmcnt(0)
+   11 |   3 |   ::: | s_andn2_b32 s9, s9, 0x3fff0000
+   12 |   3 |   ::: | s_buffer_load_dwordx4 s[8:11], s[8:11], 0x10
+   13 |   3 |   ::: | s_load_dwordx8 s[12:19], s[0:1], 0x00
+   14 |   3 |   ::: | s_load_dwordx8 s[20:27], s[4:5], 0x00
+   15 |   3 |   ::: | s_waitcnt lgkmcnt(0)
+   16 |   4 | ^ ::: | v_mov_b32 v0, s9
+   17 |   5 | :^v:: | v_add_f32 v1, s8, v2
+   18 |   4 | x: v: | v_mad_legacy_f32 v0, v3, s10, v0
+   19 |   4 | :x :: | v_mul_f32 v1, 0x3a000000, v1
+   20 |   5 | v:^:: | v_mul_f32 v2, 0x3a000000, v0
+   21 |   5 | ^xvvv | image_sample v[0:1], v[1:4], s[12:19], s[20:23]
+   22 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x20
+   23 |   4 | ::::  | s_waitcnt vmcnt(0)
+   24 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   25 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   26 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   27 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[24:27]
+   28 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x40
+   29 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0x20
+   30 |   4 | ::::  | s_waitcnt vmcnt(0)
+   31 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   32 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   33 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   34 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+   35 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x60
+   36 |   4 | ::::  | s_waitcnt vmcnt(0)
+   37 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   38 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   39 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   40 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[20:23]
+   41 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x80
+   42 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0x40
+   43 |   4 | ::::  | s_waitcnt vmcnt(0)
+   44 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   45 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   46 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   47 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+   48 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0xa0
+   49 |   4 | ::::  | s_waitcnt vmcnt(0)
+   50 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   51 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   52 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   53 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[20:23]
+   54 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0xc0
+   55 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0x60
+   56 |   4 | ::::  | s_waitcnt vmcnt(0)
+   57 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   58 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   59 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   60 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+   61 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0xe0
+   62 |   4 | ::::  | s_waitcnt vmcnt(0)
+   63 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   64 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   65 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   66 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[20:23]
+   67 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x100
+   68 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0x80
+   69 |   4 | ::::  | s_waitcnt vmcnt(0)
+   70 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   71 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   72 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   73 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+   74 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x120
+   75 |   4 | ::::  | s_waitcnt vmcnt(0)
+   76 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   77 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   78 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   79 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[20:23]
+   80 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x140
+   81 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0xa0
+   82 |   4 | ::::  | s_waitcnt vmcnt(0)
+   83 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   84 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   85 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   86 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+   87 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x160
+   88 |   4 | ::::  | s_waitcnt vmcnt(0)
+   89 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   90 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   91 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   92 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[20:23]
+   93 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x180
+   94 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0xc0
+   95 |   4 | ::::  | s_waitcnt vmcnt(0)
+   96 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+   97 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+   98 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+   99 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+  100 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x1a0
+  101 |   4 | ::::  | s_waitcnt vmcnt(0)
+  102 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+  103 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+  104 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+  105 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[20:23]
+  106 |   4 | ::::  | s_load_dwordx8 s[8:15], s[0:1], 0x1c0
+  107 |   4 | ::::  | s_load_dwordx8 s[16:23], s[4:5], 0xe0
+  108 |   4 | ::::  | s_waitcnt vmcnt(0)
+  109 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+  110 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+  111 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+  112 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[8:15], s[16:19]
+  113 |   4 | ::::  | s_load_dwordx8 s[0:7], s[0:1], 0x1e0
+  114 |   4 | ::::  | s_waitcnt vmcnt(0)
+  115 |   4 | x:::  | v_add_f32 v0, 0x358637bd, v0
+  116 |   4 | :x::  | v_add_f32 v1, 0x358637bd, v1
+  117 |   4 | ::::  | s_waitcnt lgkmcnt(0)
+  118 |   4 | xxvv  | image_sample v[0:1], v[0:3], s[0:7], s[20:23]
+  119 |   2 | ::    | s_waitcnt vmcnt(0)
+  120 |   2 | x:    | v_add_f32 v0, 0x358637bd, v0
+  121 |   2 | :x    | v_add_f32 v1, 0x358637bd, v1
+  122 |   2 | x:    | v_mul_f32 v0, 0x3f800008, v0
+  123 |   2 | :x    | v_mul_f32 v1, 0x3f800008, v1
+  124 |   3 | ::^   | v_mov_b32 v2, 0
+  125 |   4 | :::^  | v_mov_b32 v3, 1.0
+  126 |   4 | ::::  | s_mov_b64 exec, s[28:29]
+  127 |   4 | xv::  | v_cvt_pkrtz_f16_f32 v0, v0, v1
+  128 |   4 | :^vv  | v_cvt_pkrtz_f16_f32 v1, v2, v3
+  129 |   2 | vv    | exp mrt0, v0, v0, v1, v1
+  130 |   0 |       | s_endpgm 
+
+Maximum # VGPR used   5, # VGPR allocated:   5
